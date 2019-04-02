@@ -3,6 +3,30 @@
 /* Team Names Here              **(*****************************************/
 /***************************************************************************/
 
+/* Notes
+
+ticks are a user input. one tick is running through the whole grid once and 
+applying the rules (including randomization if threshold says so)
+
+Ghost rows are the rows representative of the boundaries of other ranks so 
+your current rank can read them when determining the logic. You can try using 
+arrays for allocation.
+
+pthreads seem to go right past mpi collectives like MPI_Barrier. using 
+pthread barriers is a fine way to do synchronisation. I'd be surprised if it 
+wasn't allowed.
+
+just call InitDefault(); in all threads, then call GenVal() with the row 
+number to get the random value 0-1
+
+I spoke with the professor in class today and he said that cell updates are 
+based on neighbour cells that have been updated within the same tick.
+Cell 0 updates -> Cell 1 updates based on updated_Cell_0
+we do row by row, using previous changed values as new neighbor values.
+
+
+*/
+
 /***************************************************************************/
 /* Includes ****************************************************************/
 /***************************************************************************/
@@ -13,7 +37,7 @@
 #include<errno.h>
 #include<math.h>
 
-#include<clcg4.h>
+#include"clcg4.h"
 
 #include<mpi.h>
 #include<pthread.h>
@@ -32,6 +56,8 @@
 
 #define ALIVE 1
 #define DEAD  0
+
+#define board_size 1024//32768
 
 /***************************************************************************/
 /* Global Vars *************************************************************/
@@ -78,8 +104,18 @@ int main(int argc, char *argv[])
     MPI_Barrier( MPI_COMM_WORLD );
     
 // Insert your code
-    
+    // Following algorithm description from class
+    // =========================================================
+    // if rank 0 / pthread0, start time with GetTimeBase()
+    g_start_cycles = GetTimeBase();
 
+    // allocate my rank's chunk of the universe + space for ghost rows
+    	// maybe 
+
+
+
+
+    // =========================================================
 // END -Perform a barrier and then leave MPI
     MPI_Barrier( MPI_COMM_WORLD );
     MPI_Finalize();
@@ -89,3 +125,4 @@ int main(int argc, char *argv[])
 /***************************************************************************/
 /* Other Functions - You write as part of the assignment********************/
 /***************************************************************************/
+
