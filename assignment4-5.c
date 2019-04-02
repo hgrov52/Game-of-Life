@@ -24,6 +24,8 @@ based on neighbour cells that have been updated within the same tick.
 Cell 0 updates -> Cell 1 updates based on updated_Cell_0
 we do row by row, using previous changed values as new neighbor values.
 
+Randomness: random value for every cell each tick, if below some threshold, 
+    apply a random state
 
 */
 
@@ -107,12 +109,18 @@ int main(int argc, char *argv[])
     // Following algorithm description from class
     // =========================================================
     // if rank 0 / pthread0, start time with GetTimeBase()
-    g_start_cycles = GetTimeBase();
+    if(mpi_myrank == 0){
+        g_start_cycles = GetTimeBase();
+        
+        // sanity check
+        printf("each of %d ranks will have %d cells, %d rows, %d ghost rows of the %dx%d board\n",
+            mpi_commsize,board_size*(board_size/mpi_commsize), (board_size/mpi_commsize), 2, board_size, board_size);
 
+    }
+    
     // allocate my rank's chunk of the universe + space for ghost rows
-    	// maybe 
-
-
+    	// ghost rows are the rows at edges of rank boundaries
+    
 
  
     // =========================================================
