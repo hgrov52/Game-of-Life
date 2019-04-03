@@ -79,23 +79,24 @@ unsigned long long g_end_cycles=0;
 // You define these
 
 struct rank_data{
-    short** rows;
+    short** board;
     short* ghost_above;
     short* ghost_below;
-}
+};
 
 /***************************************************************************/
 /* Function Decs ***********************************************************/
 /***************************************************************************/
 
 // You define these
-short** make_board();
-void deallocate_mem(short*** arr);
-void print_board(short** board);
+short** make_board(int rows);
+void deallocate_mem(short*** arr, int rows);
+void print_board(short** board, int rows);
 short* make_ghost_row();
-short** copy_board();
+short** copy_board(short** board, int rows);
 void exchange_ghosts(int mpi_myrank, short** ghost_above, short** ghost_below);
 void* thread_init(void*);
+short** copy_board_with_start(short** board, int rows, int start);
 
 /***************************************************************************/
 /* Function: Main **********************************************************/
@@ -164,7 +165,7 @@ int main(int argc, char *argv[])
     int rows_per_rank = board_size/mpi_commsize; 
     int rows_per_thread = rows_per_rank/num_threads;
 
-    short** board = make_board();
+    short** board = make_board(rows_per_rank);
     short* ghost_above = make_ghost_row();
     short* ghost_below = make_ghost_row();
   
@@ -180,18 +181,22 @@ int main(int argc, char *argv[])
         pthread_t tid[num_threads];
         for(int i=0;i<num_threads;i++){
             int thread_val = i;
-            printf("[%p]i: %d, %d\n", pthread_self(), i, thread_val);
-            
+            printf("[%lu]i: %d, %d\n", pthread_self(), i, thread_val);
+            printf("here1\n");
             // Copy over data to each thread struct
-
+            struct rank_data thread_data;
+            
+            thread_data.board = copy_board_with_start(board,rows_per_thread,i*num_threads);
+            printf("here2\n");
 
             int rc = pthread_create(&tid[i], NULL, thread_init, &thread_val);
+            
             if (rc != 0) {
                 fprintf(stderr, "ERROR: pthread_create() failed\n");
             }
             pthread_join(tid[i], NULL);
         }
-
+        printf("here4\n" );
 
 
         /*  4
@@ -254,17 +259,17 @@ int main(int argc, char *argv[])
 
     // Deallocate memory
     
-    for (int i = 0; i<rows_per_rank; i++){
-        free(board[i]);
-    }
-    free(board); 
-    free(ghost_above);
-    free(ghost_below);
+    // for (int i = 0; i<rows_per_thread; i++){
+    //     free(board[i]);
+    // }
+    // free(board); 
+    // free(ghost_above);
+    // free(ghost_below);
 
     
     
 
- 
+    printf("here5");
     // =========================================================
     // =========================================================
     // =========================================================
@@ -279,19 +284,18 @@ int main(int argc, char *argv[])
 /***************************************************************************/
 /* Other Functions - You write as part of the assignment********************/
 /***************************************************************************/
-
-short** make_board(){
-    short** board = calloc(board_size,sizeof(short*));
-    for(int i=0;i<board_size;++i){
+short** make_board(int rows){
+    short** board = calloc(rows,sizeof(short*));
+    for(int i=0;i<rows;++i){
         board[i] = calloc(board_size,sizeof(short));
     }
 
-    for(int i=0;i<board_size;++i){
+    for(int i=0;i<rows;++i){
         for(int j=0;j<board_size;++j){
             board[i][j] = ALIVE;
         }
     }
-    return board;
+    return board;   
 }
 
 short* make_ghost_row(){
@@ -302,9 +306,9 @@ short* make_ghost_row(){
     return ghost;
 }
 
-short** copy_board(short** board){
-    short** new_board = make_board();
-    for(int i=0;i<board_size;++i){
+short** copy_board(short** board, int rows){
+    short** new_board = make_board(rows);
+    for(int i=0;i<rows;++i){
         for(int j=0;j<board_size;++j){
             new_board[i][j] = board[i][j];
         }
@@ -312,15 +316,25 @@ short** copy_board(short** board){
     return board;
 }
 
-void deallocate_mem(short*** arr){
-    for (short i = 0; i<board_size; i++){
+short** copy_board_with_start(short** board, int rows, int start){
+    short** new_board = make_board(rows);
+    for(int i=0;i<rows;++i){
+        for(int j=0;j<board_size;++j){
+            new_board[i][j] = board[i+start][j];
+        }
+    }
+    return board;
+}
+
+void deallocate_mem(short*** arr, int rows){
+    for (short i = 0; i<rows; i++){
         free((*arr)[i]);
     }
     free(*arr); 
 }
 
-void print_board(short** board){
-    for(int i=0;i<board_size;++i){
+void print_board(short** board, int rows){
+    for(int i=0;i<rows;++i){
         for(int j=0;j<board_size;++j){
             printf("%hd",board[i][j]);
         }
@@ -333,9 +347,6 @@ void exchange_ghosts(int mpi_myrank, short** ghost_above, short** ghost_below){
 }
 
 void* thread_init(void* x){
-    int thread_val = *((int*) x);
-    printf("[%p] thread val: %d\n", pthread_self(), thread_val);
-    
-    //thread_number = *((int*) x);
+    //int thread_val = *((int*) x);
     pthread_exit(NULL);
 }
