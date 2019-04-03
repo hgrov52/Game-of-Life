@@ -78,16 +78,21 @@ unsigned long long g_end_cycles=0;
 
 // You define these
 
+int thread_number;
+
 
 /***************************************************************************/
 /* Function Decs ***********************************************************/
 /***************************************************************************/
 
 // You define these
-void allocate_mem(int*** arr, int h, int w);
-void deallocate_mem(int*** arr, int h);
-void print_board(int*** arr, int h, int w);
-
+short** make_board();
+void deallocate_mem(short*** arr);
+void print_board(short** board);
+short* make_ghost_row();
+short** copy_board();
+void exchange_ghosts(int mpi_myrank, short** ghost_above, short** ghost_below);
+void* thread_init(void*);
 
 /***************************************************************************/
 /* Function: Main **********************************************************/
@@ -121,7 +126,7 @@ int main(int argc, char *argv[])
     // =========================================================
     // =========================================================
     // =========================================================
-    int num_threads = 4;
+    int num_threads = 2;
 
     // if rank 0 / pthread0, start time with GetTimeBase() 
     if(mpi_myrank == 0){
@@ -152,67 +157,35 @@ int main(int argc, char *argv[])
     */
     // allocate dynamically within main bc in functions was taking up time
     // declare main variables
-    int num_ticks = 10;
+    int num_ticks = 1;
     int rows_per_rank = board_size/mpi_commsize; 
     int rows_per_thread = rows_per_rank/num_threads;
-    int **board;
-    int *ghost_above;
-    int *ghost_below;
 
-    // allocate memory for the board
-    board = (int **)malloc(rows_per_rank * sizeof(int *)); 
-    for (int i=0; i<rows_per_rank; i++){
-        board[i] = (int *)malloc(board_size * sizeof(int)); 
-    }
-    // allocate memory for the two ghost rows
-    ghost_above = (int *)malloc(board_size * sizeof(int)); 
-    ghost_below = (int *)malloc(board_size * sizeof(int)); 
-    
-    // initialize the board
-    for(int i=0; i<rows_per_rank; i++){
-        for(int j=0; j<board_size; j++){
-            board[i][j] = ALIVE;
-        }
-    }
-    // initialize the ghost row above
-    for(int i=0; i<board_size; i++){
-        ghost_above[i] = ALIVE;
-        ghost_below[i] = ALIVE;
-    }
+    short** board = make_board();
+    short* ghost_above = make_ghost_row();
+    short* ghost_below = make_ghost_row();
   
-
-    // // print the board for sanity
-    // for(int i=0; i<rows_per_rank; i++){
-    //     for(int j=0; j<board_size; j++){ 
-    //         printf("%d ", board[i][j]); 
-    //     }
-    //     printf("\n");
-    // }
-    // printf("\n");
-    // // print the ghost row above
-    // for(int i=0; i<board_size; i++){ 
-    //     printf("%d ", ghost_above[i]); 
-    // }
-    // printf("\n");
-    // // print the ghost row below
-    // for(int i=0; i<board_size; i++){ 
-    //     printf("%d ", ghost_below[i]); 
-    // }
-    // printf("\n");
 
     /*  2
         Create Pthreads here. All threads should go into for loop
     */
-
-
-
+    pthread_t tid[num_threads-1];
+    for(int i=0;i<num_threads-1;i++){
+        int rc = pthread_create(&tid[i], NULL, thread_init, &i);
+        if (rc != 0) {
+            fprintf(stderr, "ERROR: pthread_create() failed\n");
+        }
+        printf("%d\n",thread_number);
+    }
+    
 
 
     /*  3
         For all number of ticks, complete a round of the GOL
     */
     for(int tick=0; tick<num_ticks; tick++){
-
+        //print_board(board);
+        
         /*  4
             Exchange row data with MPI ranks 
             using MPI_Isend/Irecv from thread 0 w/i each MPI rank.
@@ -223,8 +196,9 @@ int main(int argc, char *argv[])
             operations per rank/thread group. Dont’ allow multiple
             threads to perform any MPI operations within MPI
             rank/thread group.]
-
         */  
+
+        //exchange_ghosts(mpi_myrank, &ghost_above, &ghost_below);
 
 
 
@@ -298,33 +272,59 @@ int main(int argc, char *argv[])
 /* Other Functions - You write as part of the assignment********************/
 /***************************************************************************/
 
-void allocate_mem(int*** arr, int h, int w){
-    *arr = (int**)malloc(h*sizeof(int*));
-    for(int i=0; i<h; i++){
-        (*arr)[i] = (int*)malloc(w*sizeof(int));
+short** make_board(){
+    short** board = calloc(board_size,sizeof(short*));
+    for(int i=0;i<board_size;++i){
+        board[i] = calloc(board_size,sizeof(short));
     }
-} 
 
-void deallocate_mem(int*** arr, int h){
-    for (int i = 0; i<h; i++){
+    for(int i=0;i<board_size;++i){
+        for(int j=0;j<board_size;++j){
+            board[i][j] = ALIVE;
+        }
+    }
+    return board;
+}
+
+short* make_ghost_row(){
+    short* ghost = calloc(board_size,sizeof(short));
+    for(int i=0;i<board_size;++i){
+        ghost[i] = ALIVE;
+    }
+    return ghost;
+}
+
+short** copy_board(short** board){
+    short** new_board = make_board();
+    for(int i=0;i<board_size;++i){
+        for(int j=0;j<board_size;++j){
+            new_board[i][j] = board[i][j];
+        }
+    }
+    return board;
+}
+
+void deallocate_mem(short*** arr){
+    for (short i = 0; i<board_size; i++){
         free((*arr)[i]);
     }
     free(*arr); 
 }
 
-void initialize_array(int** arr, int h, int w){
-    for(int i=0; i<h; i++){
-        for(int j=0; j<w; j++){
-            arr[i][j] = 0;
+void print_board(short** board){
+    for(int i=0;i<board_size;++i){
+        for(int j=0;j<board_size;++j){
+            printf("%hd",board[i][j]);
         }
+        printf("\n");      
     }
 }
 
-void print_board(int*** arr, int h, int w){
-    for(int i=0; i<h; i++){
-        for(int j=0; j<w; j++){
-            printf("%d", (*arr)[i][j]);
-        }
-        printf("\n");
-    }
+void exchange_ghosts(int mpi_myrank, short** ghost_above, short** ghost_below){
+    printf("%d\n", mpi_myrank);
+}
+
+void* thread_init(void* x){
+    thread_number = *((int*) x);
+    return NULL;
 }
