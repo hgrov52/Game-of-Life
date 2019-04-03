@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
     // =========================================================
     // =========================================================
     // =========================================================
-    int num_threads = 3;
+    int num_threads = 4;
 
     // if rank 0 / pthread0, start time with GetTimeBase() 
     if(mpi_myrank == 0){
@@ -189,11 +189,12 @@ int main(int argc, char *argv[])
             print_board(thread_data.board,rows_per_thread);
 
             int rc = pthread_create(&tid[i], NULL, thread_init, &thread_val);
-            
+            printf("here4\n");
             if (rc != 0) {
                 fprintf(stderr, "ERROR: pthread_create() failed\n");
             }
             pthread_join(tid[i], NULL);
+            printf("here5\n");
         }
 
 
@@ -348,3 +349,14 @@ void* thread_init(void* x){
     //int thread_val = *((int*) x);
     pthread_exit(NULL);
 }
+
+
+
+
+
+
+
+
+
+
+
