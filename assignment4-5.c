@@ -186,7 +186,50 @@ int main(int argc, char *argv[])
             struct rank_data thread_data;
             
             thread_data.board = copy_board_with_start(board,rows_per_thread,i*rows_per_thread);
-            print_board(thread_data.board,rows_per_thread);
+            // first thread so send and receive ghost rows
+            if(mpi_commsize>1 && i==0){
+                // tag of 0
+                MPI_Request send_request, recv_request;
+                MPI_Status status;
+                
+                if(mpi_myrank==0){
+                    MPI_Irecv(&(thread_data.ghost_above), board_size, MPI_SHORT, mpi_commsize-1, 0, MPI_COMM_WORLD, &recv_request);
+                    MPI_Isend(&ghost_above, board_size, MPI_SHORT, mpi_commsize-1, 0, MPI_COMM_WORLD, &send_request);
+                    
+                    MPI_Wait(&recv_request, &status); 
+                    MPI_Wait(&send_request, &status);           
+                }
+
+                else{
+                    MPI_Irecv(&(thread_data.ghost_above), board_size, MPI_SHORT, mpi_myrank-1, 0, MPI_COMM_WORLD, &recv_request);
+                    MPI_Isend(&ghost_above, board_size, MPI_SHORT, mpi_myrank-1, 0, MPI_COMM_WORLD, &send_request);
+                    
+                    MPI_Wait(&recv_request, &status); 
+                    MPI_Wait(&send_request, &status);
+                }
+            }
+            // last thread so send and receive ghost rows
+            if(mpi_commsize>1 && i==num_threads-1){
+                // tag of 1
+                MPI_Request send_request, recv_request;
+                MPI_Status status;
+                
+                if(mpi_myrank==mpi_commsize-1){
+                    MPI_Irecv(&(thread_data.ghost_below), board_size, MPI_SHORT, 0, 1, MPI_COMM_WORLD, &recv_request);
+                    MPI_Isend(&ghost_below, board_size, MPI_SHORT, 0, 1, MPI_COMM_WORLD, &send_request);
+                    
+                    MPI_Wait(&recv_request, &status); 
+                    MPI_Wait(&send_request, &status);
+                }
+
+                else{
+                    MPI_Irecv(&(thread_data.ghost_below), board_size, MPI_SHORT, mpi_myrank+1, 1, MPI_COMM_WORLD, &recv_request);
+                    MPI_Isend(&ghost_below, board_size, MPI_SHORT, mpi_myrank+1, 1, MPI_COMM_WORLD, &send_request);
+                    
+                    MPI_Wait(&recv_request, &status); 
+                    MPI_Wait(&send_request, &status);
+                }
+            }
 
             int rc = pthread_create(&tid[i], NULL, thread_init, &thread_val);
             printf("here4\n");
