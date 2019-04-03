@@ -1,6 +1,6 @@
 /***************************************************************************/
 /* Template for Asssignment 4/5 ********************************************/
-/* Team Names Here              **(*****************************************/
+/* Austin Egri, Henry Grover    ********************************************/
 /***************************************************************************/
 
 /* 
@@ -169,13 +169,16 @@ int main(int argc, char *argv[])
     /*  2
         Create Pthreads here. All threads should go into for loop
     */
-    pthread_t tid[num_threads-1];
-    for(int i=0;i<num_threads-1;i++){
-        int rc = pthread_create(&tid[i], NULL, thread_init, &i);
+    pthread_t tid[num_threads];
+    for(int i=0;i<num_threads;i++){
+        int thread_val = i;
+        printf("[%p]i: %d, %d\n", pthread_self(), i, thread_val);
+        int rc = pthread_create(&tid[i], NULL, thread_init, &thread_val);
         if (rc != 0) {
             fprintf(stderr, "ERROR: pthread_create() failed\n");
         }
-        printf("%d\n",thread_number);
+        //printf("%d\n",thread_number);
+        pthread_join(tid[i], NULL);
     }
     
 
@@ -325,6 +328,9 @@ void exchange_ghosts(int mpi_myrank, short** ghost_above, short** ghost_below){
 }
 
 void* thread_init(void* x){
-    thread_number = *((int*) x);
-    return NULL;
+    int thread_val = *((int*) x);
+    printf("[%p] thread val: %d\n", pthread_self(), thread_val);
+    
+    //thread_number = *((int*) x);
+    pthread_exit(NULL);
 }
