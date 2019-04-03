@@ -78,6 +78,12 @@ unsigned long long g_end_cycles=0;
 
 // You define these
 
+struct rank_data{
+    short** rows;
+    short* ghost_above;
+    short* ghost_below;
+}
+
 /***************************************************************************/
 /* Function Decs ***********************************************************/
 /***************************************************************************/
@@ -162,29 +168,29 @@ int main(int argc, char *argv[])
     short* ghost_above = make_ghost_row();
     short* ghost_below = make_ghost_row();
   
-
-    /*  2
-        Create Pthreads here. All threads should go into for loop
-    */
-    pthread_t tid[num_threads];
-    for(int i=0;i<num_threads;i++){
-        int thread_val = i;
-        printf("[%p]i: %d, %d\n", pthread_self(), i, thread_val);
-        int rc = pthread_create(&tid[i], NULL, thread_init, &thread_val);
-        if (rc != 0) {
-            fprintf(stderr, "ERROR: pthread_create() failed\n");
-        }
-        //printf("%d\n",thread_number);
-        pthread_join(tid[i], NULL);
-    }
-    
     
     /*  3
         For all number of ticks, complete a round of the GOL
     */
     for(int tick=0; tick<num_ticks; tick++){
         //print_board(board);
+        /*  
+            Create Pthreads here. All threads should go into for loop
+        */
+        pthread_t tid[num_threads];
+        for(int i=0;i<num_threads;i++){
+            int thread_val = i;
+            printf("[%p]i: %d, %d\n", pthread_self(), i, thread_val);
+            
+            // Copy over data to each thread struct
 
+
+            int rc = pthread_create(&tid[i], NULL, thread_init, &thread_val);
+            if (rc != 0) {
+                fprintf(stderr, "ERROR: pthread_create() failed\n");
+            }
+            pthread_join(tid[i], NULL);
+        }
 
 
 
