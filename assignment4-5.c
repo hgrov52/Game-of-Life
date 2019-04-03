@@ -3,26 +3,32 @@
 /* Team Names Here              **(*****************************************/
 /***************************************************************************/
 
-/* Notes
+/* 
+
+Compile with:
+mpicc -g -Wall -o hw4 assignment4-5.c clcg4.c -lpthread
+Run with:
+mpirun -np 4 ./hw4
+
+- Notes -
 
 ticks are a user input. one tick is running through the whole grid once and 
 applying the rules (including randomization if threshold says so)
 
 Ghost rows are the rows representative of the boundaries of other ranks so 
-your current rank can read them when determining the logic. You can try using 
-arrays for allocation.
+your current rank can read them when determining the logic. 
 
 pthreads seem to go right past mpi collectives like MPI_Barrier. using 
-pthread barriers is a fine way to do synchronisation. I'd be surprised if it 
-wasn't allowed.
+pthread barriers is a good way to do synchronisation. 
 
 just call InitDefault(); in all threads, then call GenVal() with the row 
-number to get the random value 0-1
+number to get the random value 0-1 for each cell for each row within each thread
 
 I spoke with the professor in class today and he said that cell updates are 
-based on neighbour cells that have been updated within the same tick.
+based on neighbor cells that have been updated within the same tick.
 Cell 0 updates -> Cell 1 updates based on updated_Cell_0
 we do row by row, using previous changed values as new neighbor values.
+    so cells updates are serial but row updates can be from previous tick
 
 Randomness: random value for every cell each tick, if below some threshold, 
     apply a random state
@@ -222,29 +228,54 @@ int main(int argc, char *argv[])
 
 
 
-        /* 
-
+        /*  5
+            HERE each PTHREAD can process a row:
+            - update universe making sure to use the
+                correct row RNG stream
+            - factor in Threshold percentage as described
+            - use the right "ghost" row data at rank boundaries
+            - keep track of total number of ALIVE cells per tick
+                across all threads w/i a MPI rank group.
+            - use pthread_mutex_trylock around shared counter
+                variables **if needed**.
         */
-
-
-
-
-
-
-
-
-
-
-
-
     }
+
+    /*  6
+        MPI_Reduce( Sum all ALIVE Cells Counts For Each Tick);
+        - Here, you will have vector of 256 ALIVE cell sum
+        values which is the total number of ALIVE cells
+        at each tick, t for all 256 ticks.
+    */
+
+
+    /*  7
+        if rank 0 / thread 0, end time with GetTimeBase().
+        if needed by experiment,
+        perform output of 32Kx32K cell universe using MPI_file_write_at;
+        collect I/O performance stats using GetTimeBase() from
+        rank 0 / thread 0;
+        if needed by experiment,
+        construct 1Kx1K heatmap of 32Kx32K cell universe using MPI
+        collective operations of your choice. Rank 0 will output
+        the heatmap to a standard Unix file given it’s small 1 to 4MB size.
+        Make sure you an import data for graphing.
+        if rank 0, print ALIVE tick stats and compute (I/O if needed)
+        performance stats.
+    */
+
+
+
+
+
+
 
     // Deallocate memory
     
-    for (int i = 0; i<h; i++){
+    for (int i = 0; i<rows_per_rank; i++){
         free(board[i]);
     }
-    free(arr); 
+    free(board); 
     free(ghost_above);
     free(ghost_below);
 
