@@ -78,9 +78,6 @@ unsigned long long g_end_cycles=0;
 
 // You define these
 
-int thread_number;
-
-
 /***************************************************************************/
 /* Function Decs ***********************************************************/
 /***************************************************************************/
@@ -126,7 +123,7 @@ int main(int argc, char *argv[])
     // =========================================================
     // =========================================================
     // =========================================================
-    int num_threads = 2;
+    int num_threads = 3;
 
     // if rank 0 / pthread0, start time with GetTimeBase() 
     if(mpi_myrank == 0){
@@ -169,23 +166,29 @@ int main(int argc, char *argv[])
     /*  2
         Create Pthreads here. All threads should go into for loop
     */
-    pthread_t tid[num_threads-1];
-    for(int i=0;i<num_threads-1;i++){
+    pthread_t tid[num_threads];
+    for(int i=1;i<num_threads;i++){
         int rc = pthread_create(&tid[i], NULL, thread_init, &i);
-        if (rc != 0) {
+
+        if(rc != 0){
             fprintf(stderr, "ERROR: pthread_create() failed\n");
         }
-        printf("%d\n",thread_number);
+        printf("%lu\n",tid[i]);
+        if(tid[i]==pthread_self()){
+            printf("%lu\t%lu\n",pthread_self(), tid[i]);
+        }
     }
     
-
-
+    
     /*  3
         For all number of ticks, complete a round of the GOL
     */
     for(int tick=0; tick<num_ticks; tick++){
         //print_board(board);
-        
+
+
+
+
         /*  4
             Exchange row data with MPI ranks 
             using MPI_Isend/Irecv from thread 0 w/i each MPI rank.
@@ -325,6 +328,6 @@ void exchange_ghosts(int mpi_myrank, short** ghost_above, short** ghost_below){
 }
 
 void* thread_init(void* x){
-    thread_number = *((int*) x);
+    
     return NULL;
 }
