@@ -78,9 +78,6 @@ unsigned long long g_end_cycles=0;
 
 // You define these
 
-int thread_number;
-
-
 /***************************************************************************/
 /* Function Decs ***********************************************************/
 /***************************************************************************/
@@ -126,7 +123,7 @@ int main(int argc, char *argv[])
     // =========================================================
     // =========================================================
     // =========================================================
-    int num_threads = 2;
+    int num_threads = 3;
 
     // if rank 0 / pthread0, start time with GetTimeBase() 
     if(mpi_myrank == 0){
@@ -181,14 +178,16 @@ int main(int argc, char *argv[])
         pthread_join(tid[i], NULL);
     }
     
-
-
+    
     /*  3
         For all number of ticks, complete a round of the GOL
     */
     for(int tick=0; tick<num_ticks; tick++){
         //print_board(board);
-        
+
+
+
+
         /*  4
             Exchange row data with MPI ranks 
             using MPI_Isend/Irecv from thread 0 w/i each MPI rank.
