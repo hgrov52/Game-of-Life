@@ -181,13 +181,12 @@ int main(int argc, char *argv[])
         pthread_t tid[num_threads];
         for(int i=0;i<num_threads;i++){
             int thread_val = i;
-            printf("[%lu]i: %d, %d\n", pthread_self(), i, thread_val);
-            printf("here1\n");
+            //printf("[%lu]i: %d, %d\n", pthread_self(), i, thread_val);
             // Copy over data to each thread struct
             struct rank_data thread_data;
             
-            thread_data.board = copy_board_with_start(board,rows_per_thread,i*num_threads);
-            printf("here2\n");
+            thread_data.board = copy_board_with_start(board,rows_per_thread,i*rows_per_thread);
+            print_board(thread_data.board,rows_per_thread);
 
             int rc = pthread_create(&tid[i], NULL, thread_init, &thread_val);
             
@@ -196,7 +195,6 @@ int main(int argc, char *argv[])
             }
             pthread_join(tid[i], NULL);
         }
-        printf("here4\n" );
 
 
         /*  4
@@ -269,7 +267,6 @@ int main(int argc, char *argv[])
     
     
 
-    printf("here5");
     // =========================================================
     // =========================================================
     // =========================================================
@@ -317,6 +314,7 @@ short** copy_board(short** board, int rows){
 }
 
 short** copy_board_with_start(short** board, int rows, int start){
+    printf("%d %d\n",rows, start);
     short** new_board = make_board(rows);
     for(int i=0;i<rows;++i){
         for(int j=0;j<board_size;++j){
