@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
     // =========================================================
     // =========================================================
     // =========================================================
-    int num_threads = 3;
+    int num_threads = 4;
 
     // if rank 0 / pthread0, start time with GetTimeBase() 
     if(mpi_myrank == 0){
@@ -181,22 +181,24 @@ int main(int argc, char *argv[])
         pthread_t tid[num_threads];
         for(int i=0;i<num_threads;i++){
             int thread_val = i;
-            printf("[%lu]i: %d, %d\n", pthread_self(), i, thread_val);
+            printf("[%p]i: %d, %d\n", pthread_self(), i, thread_val);
             printf("here1\n");
             // Copy over data to each thread struct
             struct rank_data thread_data;
-            
-            thread_data.board = copy_board_with_start(board,rows_per_thread,i*num_threads);
+           
+            printf("%d: copying board with start loc = %d, rows = %d\n", i, i*rows_per_thread, rows_per_thread);
+            thread_data.board = copy_board_with_start(board,rows_per_thread,i*rows_per_thread);
             printf("here2\n");
 
             int rc = pthread_create(&tid[i], NULL, thread_init, &thread_val);
-            
+            printf("here4\n");
             if (rc != 0) {
                 fprintf(stderr, "ERROR: pthread_create() failed\n");
             }
             pthread_join(tid[i], NULL);
+            printf("here5\n");
         }
-        printf("here4\n" );
+        printf("here6\n" );
 
 
         /*  4
@@ -350,3 +352,14 @@ void* thread_init(void* x){
     //int thread_val = *((int*) x);
     pthread_exit(NULL);
 }
+
+
+
+
+
+
+
+
+
+
+
