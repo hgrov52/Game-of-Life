@@ -113,6 +113,9 @@ short** copy_board(short** board, int rows);
 void exchange_ghosts(int mpi_myrank, short** ghost_above, short** ghost_below);
 void* thread_init(void*);
 short** copy_board_with_start(short** board, int rows, int start);
+void print_row(short* row);
+void copy_thread_rows_to_universe(short*** board, short*** thread_board, int rows, int start);
+void copy_ghost_row_to_universe(short** ghost, short** thread_ghost);
 
 /***************************************************************************/
 /* Function: Main **********************************************************/
@@ -184,6 +187,12 @@ int main(int argc, char *argv[])
     short** board = make_board(rows_per_rank);
     short* ghost_above = make_ghost_row();
     short* ghost_below = make_ghost_row();
+
+    board[0][1] = 0;
+    if(mpi_myrank==0){
+        print_board(board, rows_per_rank);
+    }
+    
   
     
     /*  3
@@ -191,34 +200,47 @@ int main(int argc, char *argv[])
     */
     for(int tick=0; tick<num_ticks; tick++){
         //print_board(board);
-        /*  
-            Create Pthreads here. All threads should go into for loop
-        */
         pthread_t tid[num_threads];
         for(int i=0;i<num_threads;i++){
             int thread_val = i;
-            //printf("[%lu]i: %d, %d\n", pthread_self(), i, thread_val);
+
             // Copy over data to each thread struct
             struct rank_data thread_data;
-            
             thread_data.board = copy_board_with_start(board,rows_per_thread,i*rows_per_thread);
-            // first thread so send and receive ghost rows
+            
+
+            /*  4
+                Exchange row data with MPI ranks 
+                using MPI_Isend/Irecv from thread 0 w/i each MPI rank.
+                Yes, you must correctly MPI_Test or Wait to make sure
+                messages operations correctly complete.
+
+                [Note: have only 1 MPI rank/pthread perform ALL MPI
+                operations per rank/thread group. Dont’ allow multiple
+                threads to perform any MPI operations within MPI
+                rank/thread group.]
+            */  
+            // first thread so send and receive ghost row above
             if(mpi_commsize>1 && i==0){
                 // tag of 0
                 MPI_Request send_request, recv_request;
                 MPI_Status status;
                 
                 if(mpi_myrank==0){
+                    //very top ghost above receives from very last row 
                     MPI_Irecv(&(thread_data.ghost_above), board_size, MPI_SHORT, mpi_commsize-1, 0, MPI_COMM_WORLD, &recv_request);
-                    MPI_Isend(&ghost_above, board_size, MPI_SHORT, mpi_commsize-1, 0, MPI_COMM_WORLD, &send_request);
+                    //very top row sends to ghost below of last rank
+                    MPI_Isend(&(thread_data.board[0]), board_size, MPI_SHORT, mpi_commsize-1, 1, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);           
                 }
 
                 else{
-                    MPI_Irecv(&(thread_data.ghost_above), board_size, MPI_SHORT, mpi_myrank-1, 0, MPI_COMM_WORLD, &recv_request);
-                    MPI_Isend(&ghost_above, board_size, MPI_SHORT, mpi_myrank-1, 0, MPI_COMM_WORLD, &send_request);
+                    //every normal ghost above receives from rank-1's last row
+                    MPI_Irecv(&(thread_data.ghost_above), board_size, MPI_SHORT, mpi_myrank-1, 1, MPI_COMM_WORLD, &recv_request);
+                    //every top row above sends to rank-1's ghost below
+                    MPI_Isend(&(thread_data.board[0]), board_size, MPI_SHORT, mpi_myrank-1, 0, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
@@ -231,46 +253,53 @@ int main(int argc, char *argv[])
                 MPI_Status status;
                 
                 if(mpi_myrank==mpi_commsize-1){
+                    //very bottom ghost below receives from very top row
                     MPI_Irecv(&(thread_data.ghost_below), board_size, MPI_SHORT, 0, 1, MPI_COMM_WORLD, &recv_request);
-                    MPI_Isend(&ghost_below, board_size, MPI_SHORT, 0, 1, MPI_COMM_WORLD, &send_request);
+                    //very bottom row sends to ghost above of first rank
+                    MPI_Isend(&(thread_data.board[rows_per_thread-1]), board_size, MPI_SHORT, 0, 0, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
                 }
 
                 else{
-                    MPI_Irecv(&(thread_data.ghost_below), board_size, MPI_SHORT, mpi_myrank+1, 1, MPI_COMM_WORLD, &recv_request);
-                    MPI_Isend(&ghost_below, board_size, MPI_SHORT, mpi_myrank+1, 1, MPI_COMM_WORLD, &send_request);
+                    //every normal ghost below receives form rank+1's first row
+                    MPI_Irecv(&(thread_data.ghost_below), board_size, MPI_SHORT, mpi_myrank+1, 0, MPI_COMM_WORLD, &recv_request);
+                    //every normal bottom row sends to rank+1's ghost above
+                    MPI_Isend(&thread_data.board[rows_per_thread-1], board_size, MPI_SHORT, mpi_myrank+1, 1, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
                 }
             }
 
-            int rc = pthread_create(&tid[i], NULL, thread_init, &thread_val);
-            printf("here4\n");
+            /*  
+                Create Pthreads here. All threads should go into for loop
+            */
+            int rc = pthread_create(&tid[i], NULL, thread_init, &thread_data);
             if (rc != 0) {
                 fprintf(stderr, "ERROR: pthread_create() failed\n");
             }
+
+
+
+            // Egri works above 
+            // ============================
+            // Henry works below
+
+            // copy_thread_rows_to_universe(&board,&(thread_data.board),rows_per_thread,i*rows_per_thread);
+            // copy_ghost_row_to_universe(&ghost_above,&(thread_data.ghost_above));
+            // copy_ghost_row_to_universe(&ghost_above,&(thread_data.ghost_above));
+
+            
+
             pthread_join(tid[i], NULL);
-            printf("here5\n");
         }
 
-
-        /*  4
-            Exchange row data with MPI ranks 
-            using MPI_Isend/Irecv from thread 0 w/i each MPI rank.
-            Yes, you must correctly MPI_Test or Wait to make sure
-            messages operations correctly complete.
-
-            [Note: have only 1 MPI rank/pthread perform ALL MPI
-            operations per rank/thread group. Dont’ allow multiple
-            threads to perform any MPI operations within MPI
-            rank/thread group.]
-        */  
-
-        //exchange_ghosts(mpi_myrank, &ghost_above, &ghost_below);
-
+        if(mpi_myrank==mpi_commsize-1){
+            printf("\nlast rank ghost row below:\n");
+            print_row(ghost_below);
+        }
 
 
         /*  5
@@ -374,7 +403,6 @@ short** copy_board(short** board, int rows){
 }
 
 short** copy_board_with_start(short** board, int rows, int start){
-    printf("%d %d\n",rows, start);
     short** new_board = make_board(rows);
     for(int i=0;i<rows;++i){
         for(int j=0;j<board_size;++j){
@@ -382,6 +410,20 @@ short** copy_board_with_start(short** board, int rows, int start){
         }
     }
     return board;
+}
+
+void copy_thread_rows_to_universe(short*** board, short*** thread_board, int rows, int start){
+    for(int i=0;i<rows;++i){
+        for(int j=0;j<board_size;++j){
+            *board[i+start][j] = *thread_board[i][j];
+        }
+    }
+}
+
+void copy_ghost_row_to_universe(short** ghost, short** thread_ghost){
+    for(int i=0;i<board_size;++i){
+        *ghost[i] = *thread_ghost[i];   
+    }
 }
 
 void deallocate_mem(short*** arr, int rows){
@@ -398,6 +440,14 @@ void print_board(short** board, int rows){
         }
         printf("\n");      
     }
+}
+
+void print_row(short* row){
+    for(int i=0;i<board_size;++i){
+        printf("%hd",row[i]);
+             
+    }
+    printf("\n"); 
 }
 
 void exchange_ghosts(int mpi_myrank, short** ghost_above, short** ghost_below){
