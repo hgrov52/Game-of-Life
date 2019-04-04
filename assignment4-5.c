@@ -71,7 +71,23 @@ Randomness: random value for every cell each tick, if below some threshold,
 /* Global Vars *************************************************************/
 /***************************************************************************/
 
-double g_time_in_secs = 0;
+/*********************************/
+// MUTEX - ING
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/** START MUTEX HERE  **/
+pthread_mutex_lock( &mutex );
+
+/* THIS CODE IS MUTEXED!!! */•
+
+pthread_mutex_unlock( &mutex );
+/* END MUTEX HERE     **/
+
+
+/*******************************/
+ 
+ 
+ double g_time_in_secs = 0;
 double g_processor_frequency = 1600000000.0; // processing speed for BG/Q
 unsigned long long g_start_cycles=0;
 unsigned long long g_end_cycles=0;
