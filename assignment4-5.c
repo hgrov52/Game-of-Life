@@ -186,23 +186,27 @@ int main(int argc, char *argv[])
             struct rank_data thread_data;
             
             thread_data.board = copy_board_with_start(board,rows_per_thread,i*rows_per_thread);
-            // first thread so send and receive ghost rows
+            // first thread so send and receive ghost row above
             if(mpi_commsize>1 && i==0){
                 // tag of 0
                 MPI_Request send_request, recv_request;
                 MPI_Status status;
                 
                 if(mpi_myrank==0){
+                    //very top ghost above receives from very last row 
                     MPI_Irecv(&(thread_data.ghost_above), board_size, MPI_SHORT, mpi_commsize-1, 0, MPI_COMM_WORLD, &recv_request);
-                    MPI_Isend(&ghost_above, board_size, MPI_SHORT, mpi_commsize-1, 0, MPI_COMM_WORLD, &send_request);
+                    //very top row sends to ghost below of last rank
+                    MPI_Isend(&(thread_data.board[0]), board_size, MPI_SHORT, mpi_commsize-1, 1, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);           
                 }
 
                 else{
-                    MPI_Irecv(&(thread_data.ghost_above), board_size, MPI_SHORT, mpi_myrank-1, 0, MPI_COMM_WORLD, &recv_request);
-                    MPI_Isend(&ghost_above, board_size, MPI_SHORT, mpi_myrank-1, 0, MPI_COMM_WORLD, &send_request);
+                    //every normal ghost above receives from rank-1's last row
+                    MPI_Irecv(&(thread_data.ghost_above), board_size, MPI_SHORT, mpi_myrank-1, 1, MPI_COMM_WORLD, &recv_request);
+                    //every top row above sends to rank-1's ghost below
+                    MPI_Isend(&(thread_data.board[0]), board_size, MPI_SHORT, mpi_myrank-1, 0, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
@@ -215,16 +219,20 @@ int main(int argc, char *argv[])
                 MPI_Status status;
                 
                 if(mpi_myrank==mpi_commsize-1){
+                    //very bottom ghost below receives from very top row
                     MPI_Irecv(&(thread_data.ghost_below), board_size, MPI_SHORT, 0, 1, MPI_COMM_WORLD, &recv_request);
-                    MPI_Isend(&ghost_below, board_size, MPI_SHORT, 0, 1, MPI_COMM_WORLD, &send_request);
+                    //very bottom row sends to ghost above of first rank
+                    MPI_Isend(&(thread_data.board[rows_per_thread-1]), board_size, MPI_SHORT, 0, 0, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
                 }
 
                 else{
-                    MPI_Irecv(&(thread_data.ghost_below), board_size, MPI_SHORT, mpi_myrank+1, 1, MPI_COMM_WORLD, &recv_request);
-                    MPI_Isend(&ghost_below, board_size, MPI_SHORT, mpi_myrank+1, 1, MPI_COMM_WORLD, &send_request);
+                    //every normal ghost below receives form rank+1's first row
+                    MPI_Irecv(&(thread_data.ghost_below), board_size, MPI_SHORT, mpi_myrank+1, 0, MPI_COMM_WORLD, &recv_request);
+                    //every normal bottom row sends to rank+1's ghost above
+                    MPI_Isend(&thread_data.board[rows_per_thread-1], board_size, MPI_SHORT, mpi_myrank+1, 1, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
@@ -232,7 +240,6 @@ int main(int argc, char *argv[])
             }
 
             int rc = pthread_create(&tid[i], NULL, thread_init, &thread_val);
-            printf("here4\n");
             if (rc != 0) {
                 fprintf(stderr, "ERROR: pthread_create() failed\n");
             }
@@ -358,7 +365,6 @@ short** copy_board(short** board, int rows){
 }
 
 short** copy_board_with_start(short** board, int rows, int start){
-    printf("%d %d\n",rows, start);
     short** new_board = make_board(rows);
     for(int i=0;i<rows;++i){
         for(int j=0;j<board_size;++j){
