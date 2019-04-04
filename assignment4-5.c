@@ -283,13 +283,15 @@ int main(int argc, char *argv[])
 
 
 
+            // Egri works above 
+            // ============================
+            // Henry works below
+
             // copy_thread_rows_to_universe(&board,&(thread_data.board),rows_per_thread,i*rows_per_thread);
             // copy_ghost_row_to_universe(&ghost_above,&(thread_data.ghost_above));
             // copy_ghost_row_to_universe(&ghost_above,&(thread_data.ghost_above));
 
-            // Henry works above 
-            // ============================
-            // Egri works below
+            
 
             pthread_join(tid[i], NULL);
         }
