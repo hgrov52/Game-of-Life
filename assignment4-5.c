@@ -6,9 +6,9 @@
 /* 
 
 Compile with:
-mpicc -g -Wall -o hw4 assignment4-5.c clcg4.c -lpthread
+mpicc -g -Wall -o hw4.out assignment4-5.c clcg4.c -lpthread
 Run with:
-mpirun -np 4 ./hw4
+mpirun -np 4 ./hw4.out
 
 - Notes -
 
@@ -155,7 +155,7 @@ int main(int argc, char *argv[])
     // =========================================================
     // =========================================================
     // =========================================================
-    int num_threads = 4;
+    int num_threads = 1;
 
     // if rank 0 / pthread0, start time with GetTimeBase() 
     if(mpi_myrank == 0){
@@ -222,7 +222,8 @@ int main(int argc, char *argv[])
             int thread_val = i;
 
             // Copy over data to each thread struct
-            
+           // Why do we need "board_universe" variable?  Is board data within
+           // a thread not sufficient? 
             thread_data.board = copy_board_with_start(board,rows_per_thread,i*rows_per_thread);
             thread_data.ghost_above = copy_row(ghost_above);
             thread_data.ghost_below = copy_row(ghost_below);
@@ -230,7 +231,12 @@ int main(int argc, char *argv[])
             thread_data.ghost_below_universe = &ghost_below;
             thread_data.board_universe = &board;
 
-
+            for(int i = 0; i < mpi_commsize; ++i){
+                if(i== mpi_myrank){
+                    printf("Rank: %d\n", i);
+                    print_board(thread_data.board, rows_per_thread);
+                }
+            }
             /*  4
                 Exchange row data with MPI ranks 
                 using MPI_Isend/Irecv from thread 0 w/i each MPI rank.
@@ -257,9 +263,12 @@ int main(int argc, char *argv[])
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);      
 
-                    printf("Sent:\n");
+                    printf("Rank %d, thread %d, sending to rank %d\n",mpi_myrank, i, mpi_myrank+1);
                     print_row((thread_data.board[0]));   
 
+
+                    printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",mpi_myrank, i, mpi_commsize-1);
+                    print_row((thread_data.ghost_above));
                 }
 
                 else{
@@ -270,6 +279,15 @@ int main(int argc, char *argv[])
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
+
+
+
+                    printf("Rank %d, thread %d, sending to rank %d\n",mpi_myrank, i, mpi_myrank-1);
+                    print_row((thread_data.board[0]));
+
+
+                    printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",mpi_myrank, i, mpi_commsize-1);
+                    print_row((thread_data.ghost_above));
                 }
             }
             // last thread so send and receive ghost rows
@@ -287,8 +305,12 @@ int main(int argc, char *argv[])
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
 
-                    printf("Received:\n");
-                    print_row(thread_data.ghost_below);   
+                    printf("Rank %d, thread %d, sending to rank %d\n",mpi_myrank, i, 0);
+                    print_row((thread_data.board[rows_per_thread-1]));   
+
+
+                    printf("Rank %d, thread %d, receiving ghost row below from rank %d\n",mpi_myrank, i, 0);
+                    print_row((thread_data.ghost_below));
 
                 }
 
@@ -300,6 +322,13 @@ int main(int argc, char *argv[])
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
+
+                    printf("Rank %d, thread %d, sending to rank %d\n",mpi_myrank, i, mpi_myrank+1);
+                    print_row((thread_data.board[rows_per_thread-1]));   
+
+
+                    printf("Rank %d, thread %d, receiving ghost row below from rank %d\n",mpi_myrank, i, mpi_myrank+1);
+                    print_row((thread_data.ghost_below));
                 }
             }
             if(mpi_myrank==mpi_commsize-1 && i==num_threads-1){
