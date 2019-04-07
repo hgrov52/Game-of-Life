@@ -65,7 +65,7 @@ Randomness: random value for every cell each tick, if below some threshold,
 #define ALIVE 1
 #define DEAD  0
 
-#define board_size 8//32768
+#define board_size 16//32768
 
 /***************************************************************************/
 /* Global Vars *************************************************************/
@@ -426,6 +426,7 @@ void print_row(short* row){
 void exchange_ghosts(struct rank_data * x){
     struct rank_data thread_data = *x;
 
+    MPI_Barrier(MPI_COMM_WORLD);
     if(num_ranks>1 && *(thread_data.i)==0){
         // tag of 0
         MPI_Request send_request, recv_request;
@@ -438,18 +439,16 @@ void exchange_ghosts(struct rank_data * x){
             MPI_Isend((*(thread_data.board))[0], board_size, MPI_SHORT, num_ranks-1, 1, MPI_COMM_WORLD, &send_request);
             
             printf("before 1\n");
+            printf("%d receiving from %d\n", my_rank, num_ranks-1);
             MPI_Wait(&recv_request, &status);
             printf("after 1\n");
             printf("before 2\n"); 
+            printf("%d sending to %d\n", my_rank, num_ranks-1);
             MPI_Wait(&send_request, &status);    
             printf("after 2\n");  
 
-            //printf("Rank %d, thread %d, sending top board row to rank %d\n",my_rank, i, num_ranks-1);
-            //print_row((*(thread_data.board)[0]));   
-
-
-            printf("Rank %d, thread %d, receiving ghost row below from rank %d\n",my_rank, *(thread_data.i), num_ranks-1);
-            print_row(*(thread_data.ghost_below));
+            // printf("Rank %d, thread %d, receiving ghost row below from rank %d\n",my_rank, *(thread_data.i), num_ranks-1);
+            // print_row(*(thread_data.ghost_below));
         }
 
         else{
@@ -458,19 +457,16 @@ void exchange_ghosts(struct rank_data * x){
             //every top row above sends to rank-1's ghost below
             MPI_Isend((*(thread_data.board))[0], board_size, MPI_SHORT, my_rank-1, 0, MPI_COMM_WORLD, &send_request);
             printf("before 3\n");
+            printf("%d receiving from %d\n", my_rank, my_rank-1);
             MPI_Wait(&recv_request, &status); 
             printf("after 3\n");
             printf("before 4\n");
+            printf("%d sending to %d\n", my_rank, my_rank-1);
             MPI_Wait(&send_request, &status);
             printf("after 4\n");
 
-
-            // printf("Rank %d, thread %d, sending top board row to rank %d\n",my_rank, i, my_rank-1);
-            // print_row((*(thread_data.board)[0]));
-
-
-            printf("Rank %d, thread %d, receiving ghost row below from rank %d\n",my_rank, *(thread_data.i), my_rank-1);
-            print_row(*(thread_data.ghost_below));
+            // printf("Rank %d, thread %d, receiving ghost row below from rank %d\n",my_rank, *(thread_data.i), my_rank-1);
+            // print_row(*(thread_data.ghost_below));
         }
     }
     // last thread so send and receive ghost rows
@@ -486,18 +482,16 @@ void exchange_ghosts(struct rank_data * x){
             MPI_Isend((*(thread_data.board))[rows_per_rank-1], board_size, MPI_SHORT, 0, 0, MPI_COMM_WORLD, &send_request);
             
             printf("before 5\n");
+            printf("%d receiving from %d\n", my_rank, 0);
             MPI_Wait(&recv_request, &status); 
             printf("after 5\n");
             printf("before 6\n");
+            printf("%d sending to %d\n", my_rank, 0);
             MPI_Wait(&send_request, &status);
             printf("after 6\n");
 
-            // printf("Rank %d, thread %d, sending bottom board row to rank %d here\n",my_rank, i, 0);
-            // print_row((*(thread_data.board))[rows_per_rank-1]);   
-
-
-            printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",my_rank, *(thread_data.i), 0);
-            print_row(*(thread_data.ghost_above));
+            // printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",my_rank, *(thread_data.i), 0);
+            // print_row(*(thread_data.ghost_above));
 
         }
 
@@ -508,18 +502,16 @@ void exchange_ghosts(struct rank_data * x){
             MPI_Isend((*(thread_data.board))[rows_per_rank-1], board_size, MPI_SHORT, my_rank+1, 1, MPI_COMM_WORLD, &send_request);
             
             printf("before 7\n");
+            printf("%d receiving from %d\n", my_rank, my_rank+1);
             MPI_Wait(&recv_request, &status); 
             printf("after 7\n");
             printf("before 8\n");
+            printf("%d sending to %d\n", my_rank, my_rank+1);
             MPI_Wait(&send_request, &status);
             printf("after 8\n");
 
-            // printf("Rank %d, thread %d, sending bottom board row to rank %d\n",my_rank, i, my_rank+1);
-            // print_row((*(thread_data.board))[rows_per_rank-1]);   
-
-
-            printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",my_rank, *(thread_data.i), my_rank+1);
-            print_row(*(thread_data.ghost_above));
+            // printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",my_rank, *(thread_data.i), my_rank+1);
+            // print_row(*(thread_data.ghost_above));
         }
     }
 }
