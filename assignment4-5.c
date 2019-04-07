@@ -95,13 +95,10 @@ unsigned long long g_end_cycles=0;
 // You define these
 
 struct rank_data{
-    short** board;
-    short* ghost_above;
-    short* ghost_below;
-
-    short*** board_universe;
-    short** ghost_above_universe;
-    short** ghost_below_universe;
+    short*** board;
+    short** ghost_above;
+    short** ghost_below;
+    int* i;
 };
 int rows_per_thread;
 
@@ -192,9 +189,8 @@ int main(int argc, char *argv[])
 
     short** board = make_board(rows_per_rank);
     short* ghost_above = make_ghost_row();
-    short* ghost_below = make_ghost_row();
-
-    
+    short* ghost_below = make_ghost_row(); 
+  
     if(mpi_myrank==0){
         board[0][1] = 0;
         printf("Rank 1 board:\n");
@@ -209,8 +205,6 @@ int main(int argc, char *argv[])
         print_board(board, rows_per_rank);
     }
     
-  
-    
     /*  3
         For all number of ticks, complete a round of the GOL
     */
@@ -224,17 +218,18 @@ int main(int argc, char *argv[])
             // Copy over data to each thread struct
            // Why do we need "board_universe" variable?  Is board data within
            // a thread not sufficient? 
-            thread_data.board = copy_board_with_start(board,rows_per_thread,i*rows_per_thread);
-            thread_data.ghost_above = copy_row(ghost_above);
-            thread_data.ghost_below = copy_row(ghost_below);
-            thread_data.ghost_above_universe = &ghost_above;
-            thread_data.ghost_below_universe = &ghost_below;
-            thread_data.board_universe = &board;
+            printf("Copying board at position %d to thread %d\n",i*rows_per_thread, i);
+            thread_data.ghost_above = &ghost_above;
+            thread_data.ghost_below = &ghost_below;
+            thread_data.board = &board;
+            thread_data.i = malloc(sizeof(int *));
+            *(thread_data.i) = i;
 
             for(int i = 0; i < mpi_commsize; ++i){
                 if(i== mpi_myrank){
-                    printf("Rank: %d\n", i);
-                    print_board(thread_data.board, rows_per_thread);
+                    printf("Rank: %d board\n", i);
+                    print_board(*(thread_data.board), rows_per_thread);
+                    printf("\n");
                 }
             }
             /*  4
@@ -256,26 +251,26 @@ int main(int argc, char *argv[])
                 
                 if(mpi_myrank==0){
                     //very top ghost above receives from very last row 
-                    MPI_Irecv((thread_data.ghost_above), board_size, MPI_SHORT, mpi_commsize-1, 0, MPI_COMM_WORLD, &recv_request);
+                    MPI_Irecv(*(thread_data.ghost_above), board_size, MPI_SHORT, mpi_commsize-1, 0, MPI_COMM_WORLD, &recv_request);
                     //very top row sends to ghost below of last rank
-                    MPI_Isend((thread_data.board[0]), board_size, MPI_SHORT, mpi_commsize-1, 1, MPI_COMM_WORLD, &send_request);
+                    MPI_Isend((*(thread_data.board)[0]), board_size, MPI_SHORT, mpi_commsize-1, 1, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);      
 
-                    printf("Rank %d, thread %d, sending to rank %d\n",mpi_myrank, i, mpi_myrank+1);
-                    print_row((thread_data.board[0]));   
+                    printf("Rank %d, thread %d, sending to rank %d\n",mpi_myrank, i, mpi_commsize-1);
+                    print_row((*(thread_data.board)[0]));   
 
 
                     printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",mpi_myrank, i, mpi_commsize-1);
-                    print_row((thread_data.ghost_above));
+                    print_row(*(thread_data.ghost_above));
                 }
 
                 else{
                     //every normal ghost above receives from rank-1's last row
-                    MPI_Irecv((thread_data.ghost_above), board_size, MPI_SHORT, mpi_myrank-1, 1, MPI_COMM_WORLD, &recv_request);
+                    MPI_Irecv(*(thread_data.ghost_above), board_size, MPI_SHORT, mpi_myrank-1, 1, MPI_COMM_WORLD, &recv_request);
                     //every top row above sends to rank-1's ghost below
-                    MPI_Isend((thread_data.board[0]), board_size, MPI_SHORT, mpi_myrank-1, 0, MPI_COMM_WORLD, &send_request);
+                    MPI_Isend((*(thread_data.board)[0]), board_size, MPI_SHORT, mpi_myrank-1, 0, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
@@ -283,11 +278,11 @@ int main(int argc, char *argv[])
 
 
                     printf("Rank %d, thread %d, sending to rank %d\n",mpi_myrank, i, mpi_myrank-1);
-                    print_row((thread_data.board[0]));
+                    print_row((*(thread_data.board)[0]));
 
 
-                    printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",mpi_myrank, i, mpi_commsize-1);
-                    print_row((thread_data.ghost_above));
+                    printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",mpi_myrank, i, mpi_myrank-1);
+                    print_row(*(thread_data.ghost_above));
                 }
             }
             // last thread so send and receive ghost rows
@@ -298,42 +293,42 @@ int main(int argc, char *argv[])
                 
                 if(mpi_myrank==mpi_commsize-1){
                     //very bottom ghost below receives from very top row
-                    MPI_Irecv((thread_data.ghost_below), board_size, MPI_SHORT, 0, 1, MPI_COMM_WORLD, &recv_request);
+                    MPI_Irecv(*(thread_data.ghost_below), board_size, MPI_SHORT, 0, 1, MPI_COMM_WORLD, &recv_request);
                     //very bottom row sends to ghost above of first rank
-                    MPI_Isend((thread_data.board[rows_per_thread-1]), board_size, MPI_SHORT, 0, 0, MPI_COMM_WORLD, &send_request);
+                    MPI_Isend((*(thread_data.board)[rows_per_rank-1]), board_size, MPI_SHORT, 0, 0, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
 
-                    printf("Rank %d, thread %d, sending to rank %d\n",mpi_myrank, i, 0);
-                    print_row((thread_data.board[rows_per_thread-1]));   
+                    printf("Rank %d, thread %d, sending to rank %d here\n",mpi_myrank, i, 0);
+                    print_row((*(thread_data.board)[rows_per_rank-1]));   
 
 
                     printf("Rank %d, thread %d, receiving ghost row below from rank %d\n",mpi_myrank, i, 0);
-                    print_row((thread_data.ghost_below));
+                    print_row(*(thread_data.ghost_below));
 
                 }
 
                 else{
                     //every normal ghost below receives form rank+1's first row
-                    MPI_Irecv((thread_data.ghost_below), board_size, MPI_SHORT, mpi_myrank+1, 0, MPI_COMM_WORLD, &recv_request);
+                    MPI_Irecv(*(thread_data.ghost_below), board_size, MPI_SHORT, mpi_myrank+1, 0, MPI_COMM_WORLD, &recv_request);
                     //every normal bottom row sends to rank+1's ghost above
-                    MPI_Isend(thread_data.board[rows_per_thread-1], board_size, MPI_SHORT, mpi_myrank+1, 1, MPI_COMM_WORLD, &send_request);
+                    MPI_Isend(*(thread_data.board)[rows_per_rank-1], board_size, MPI_SHORT, mpi_myrank+1, 1, MPI_COMM_WORLD, &send_request);
                     
                     MPI_Wait(&recv_request, &status); 
                     MPI_Wait(&send_request, &status);
 
                     printf("Rank %d, thread %d, sending to rank %d\n",mpi_myrank, i, mpi_myrank+1);
-                    print_row((thread_data.board[rows_per_thread-1]));   
+                    print_row((*(thread_data.board)[rows_per_rank-1]));   
 
 
                     printf("Rank %d, thread %d, receiving ghost row below from rank %d\n",mpi_myrank, i, mpi_myrank+1);
-                    print_row((thread_data.ghost_below));
+                    print_row(*(thread_data.ghost_below));
                 }
             }
             if(mpi_myrank==mpi_commsize-1 && i==num_threads-1){
                 printf("\nlast rank ghost row below:\n");
-                print_row(thread_data.ghost_below);
+                print_row(*(thread_data.ghost_below));
             }
 
             
