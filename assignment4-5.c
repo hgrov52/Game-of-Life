@@ -65,8 +65,6 @@ Randomness: random value for every cell each tick, if below some threshold,
 #define ALIVE 1
 #define DEAD  0
 
-#define board_size 16//32768
-
 /***************************************************************************/
 /* Global Vars *************************************************************/
 /***************************************************************************/
@@ -94,7 +92,7 @@ unsigned long long g_end_cycles=0;
 
 // You define these
 
-struct rank_data{
+struct thread_struct{
     short*** board;
     short** ghost_above;
     short** ghost_below;
@@ -104,9 +102,12 @@ int rows_per_thread;
 int rows_per_rank;
 int my_rank;
 int num_ranks;
-int num_threads = 2;
+int num_threads = 1;
 int DEBUG = 0;
+int PRINT = 0;
 float threshold = 0.5;
+#define board_size 4//32768
+int num_ticks = 2;
 
 /***************************************************************************/
 /* Function Decs ***********************************************************/
@@ -118,7 +119,7 @@ void deallocate_mem(short*** arr, int rows);
 void print_board(short** board, int rows);
 short* make_ghost_row();
 short** copy_board(short** board, int rows);
-void exchange_ghosts(struct rank_data * x);
+void exchange_ghosts(struct thread_struct * x);
 void* thread_init(void*);
 short** copy_board_with_start(short** board, int rows, int start);
 void print_row(short* row);
@@ -177,7 +178,7 @@ int main(int argc, char *argv[])
     */
     // allocate dynamically within main bc in functions was taking up time
     // declare main variables
-    int num_ticks = 1;
+    
     rows_per_rank = board_size/num_ranks; 
     rows_per_thread = rows_per_rank/num_threads;
 
@@ -185,22 +186,31 @@ int main(int argc, char *argv[])
     short* ghost_above = make_ghost_row();
     short* ghost_below = make_ghost_row(); 
 
-    if(my_rank==0){
-        board[0][1] = 0;
-        board[rows_per_rank-1][2] = 2;
-    }
+    // if(my_rank==0){
+    //     board[0][1] = 0;
+    //     board[rows_per_rank-1][2] = 2;
+    // }
 
-    if(my_rank==num_ranks-1){
-        board[0][0] = 3;
-        board[rows_per_rank-1][board_size-1] = 4;
-    }
+    // if(my_rank==num_ranks-1){
+    //     board[0][0] = 3;
+    //     board[rows_per_rank-1][board_size-1] = 4;
+    // }
+    // if(num_ranks==1){
+    //     for(int i=0;i<board_size;i++){
+    //         ghost_above[i] = board[board_size-1][i];
+    //         ghost_below[i] = board[0][i];
+    //     }
+    // }
   
     /*  3
         For all number of ticks, complete a round of the GOL
     */
-    struct rank_data thread_data;
+    struct thread_struct thread_data;
     for(int tick=0; tick<num_ticks; tick++){
-        //print_board(board);
+        if(PRINT){
+            printf("Generation %d",tick);    
+        }
+        
         pthread_t tid[num_threads];
         for(int i=0;i<num_threads;i++){
             int thread_val = i;
@@ -418,17 +428,21 @@ void print_row(short* row){
     printf("\n"); 
 }
 
-void exchange_ghosts(struct rank_data * x){
-    struct rank_data thread_data = *x;
+void print(struct thread_struct * x){
+    struct thread_struct thread_data = *x;
+    print_board((*(thread_data.board)),rows_per_rank);
+    printf("\n");
+}
+
+void exchange_ghosts(struct thread_struct * x){
+    struct thread_struct thread_data = *x;
 
     /*
 
     Cases where 2 Ranks could be working even though the code is wrong:
         2 ranks, 4 threads, should have 8 print statements
 
-    */
-
-    
+    */    
 
     MPI_Barrier(MPI_COMM_WORLD);
     if(num_ranks>1 && *(thread_data.i)==0){
@@ -567,12 +581,54 @@ void exchange_ghosts(struct rank_data * x){
     }
 }
 
-int find_num_neighbors(struct rank_data * x){
-    struct rank_data thread_data = *x;
+int get_state(struct thread_struct * x, int row, int col){
+    struct thread_struct thread_data = *x;
+    if(col==-1){
+        return get_state(x,row,board_size - 1);
+    }
+    if(col==board_size){
+        return get_state(x,row,0);
+    }
     
+    if(row==-1){
+        //printf("(%d,%d) %hd\n",row,col,(*(thread_data.ghost_above))[col]);
+        return (*(thread_data.ghost_above))[col];
+    }
+    if(row==rows_per_rank){
+        //printf("(%d,%d) %hd\n",row,col,(*(thread_data.ghost_below))[col]);
+        return (*(thread_data.ghost_below))[col];
+    }
+    //printf("(%d,%d) %hd\n",row,col,(*(thread_data.board))[row][col]);
+    return (*(thread_data.board))[row][col];
 }
 
-void apply_rules(struct rank_data * x){
+int find_num_neighbors(struct thread_struct * x, int row, int col){
+    int num_neighbors=0;
+    // row above
+        // top left
+        num_neighbors += get_state(x,row-1,col-1);
+        // top 
+        num_neighbors += get_state(x,row-1,col);
+        // top right
+        num_neighbors += get_state(x,row-1,col+1);
+    // same row
+        // left
+        num_neighbors += get_state(x,row,col-1);
+        // right
+        num_neighbors += get_state(x,row,col+1);
+    // row below
+        // bottom left
+        num_neighbors += get_state(x,row+1,col-1);
+        // bottom
+        num_neighbors += get_state(x,row+1,col);
+        // bottom right
+        num_neighbors += get_state(x,row+1,col+1);
+    //printf("(%d,%d) diag %d\n",row,col,get_state(x,row-1,col-1));
+    return num_neighbors;
+}
+
+void apply_rules(struct thread_struct * x){
+    struct thread_struct thread_data = *x;
     /*
 
     Rules:
@@ -583,7 +639,7 @@ void apply_rules(struct rank_data * x){
         Any dead cell with exactly 3 neighbors lives
 
     */
-    struct rank_data thread_data = *x;
+
     for(int i=0; i<rows_per_rank; i++){
         int global_index = i+(*(thread_data.i)*rows_per_rank);
         for(int j=0; j<board_size; j++){
@@ -593,16 +649,31 @@ void apply_rules(struct rank_data * x){
             // apply rules
             if(val > threshold){
 
+                int num_neighbors = find_num_neighbors(x,i,j);
+                //printf("(%d,%d) neighbors: %d\n", i, j, num_neighbors);
+                // Any live cell with fewer than two live neighbors dies
+                if(num_neighbors<2){
+                    (*(thread_data.board))[i][j] = DEAD;
+                }
+                // Any live cell with more than 3 live neighbors dies
+                if(num_neighbors>3){
+                    (*(thread_data.board))[i][j] = DEAD;
+                }
+                // Any dead cell with exactly 3 neighbors lives
+                if(num_neighbors==3){
+                    (*(thread_data.board))[i][j] = ALIVE;
+                }
             }
 
             // pick random state of LIVE or DEAD
             else{
                 float state_rand = GenVal(global_index);
+
                 if(state_rand>0.5){
-                    *(thread_data.board)[i][j] = DEAD;
+                    (*(thread_data.board))[i][j] = DEAD;
                 }
                 else{
-                    *(thread_data.board)[i][j] = ALIVE;   
+                    (*(thread_data.board))[i][j] = ALIVE;   
                 }
             }
         }
@@ -611,7 +682,7 @@ void apply_rules(struct rank_data * x){
 
 void* thread_init(void* x){
     InitDefault();
-    struct rank_data thread_data = *((struct rank_data *)x);
+    struct thread_struct thread_data = *((struct thread_struct *)x);
     exchange_ghosts(&thread_data);
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -626,7 +697,10 @@ void* thread_init(void* x){
         - use pthread_mutex_trylock around shared counter
             variables **if needed**.
     */
+
+    print(x);
     apply_rules(&thread_data);
+    print(x);
 
     pthread_exit(NULL);
 }
