@@ -104,10 +104,10 @@ int my_rank;
 int num_ranks;
 int num_threads = 1;
 int DEBUG = 0;
-int PRINT = 0;
+int PRINT = 1;
 float threshold = 0.5;
 #define board_size 4//32768
-int num_ticks = 2;
+int num_ticks = 4;
 
 /***************************************************************************/
 /* Function Decs ***********************************************************/
@@ -208,7 +208,7 @@ int main(int argc, char *argv[])
     struct thread_struct thread_data;
     for(int tick=0; tick<num_ticks; tick++){
         if(PRINT){
-            printf("Generation %d",tick);    
+            printf("Generation %d\n",tick+1);    
         }
         
         pthread_t tid[num_threads];
@@ -643,6 +643,9 @@ void apply_rules(struct thread_struct * x){
     for(int i=0; i<rows_per_rank; i++){
         int global_index = i+(*(thread_data.i)*rows_per_rank);
         for(int j=0; j<board_size; j++){
+            if(PRINT==2){
+                print(x);
+            }
             float val = GenVal(global_index);
             //printf("rank %d row %d: %f\n", my_rank, global_index, val);
             
@@ -650,7 +653,9 @@ void apply_rules(struct thread_struct * x){
             if(val > threshold){
 
                 int num_neighbors = find_num_neighbors(x,i,j);
-                //printf("(%d,%d) neighbors: %d\n", i, j, num_neighbors);
+                if(PRINT==2){
+                    printf("(%d,%d) neighbors: %d\n", i, j, num_neighbors);
+                }
                 // Any live cell with fewer than two live neighbors dies
                 if(num_neighbors<2){
                     (*(thread_data.board))[i][j] = DEAD;
@@ -668,7 +673,10 @@ void apply_rules(struct thread_struct * x){
             // pick random state of LIVE or DEAD
             else{
                 float state_rand = GenVal(global_index);
-
+                if(PRINT==2){
+                    printf("(%d,%d) Random state: %f\n",i,j,state_rand);
+                }
+                
                 if(state_rand>0.5){
                     (*(thread_data.board))[i][j] = DEAD;
                 }
@@ -697,10 +705,13 @@ void* thread_init(void* x){
         - use pthread_mutex_trylock around shared counter
             variables **if needed**.
     */
-
-    print(x);
+    if(PRINT){
+        print(x);
+    }
     apply_rules(&thread_data);
-    print(x);
+    if(PRINT){
+        print(x);
+    }
 
     pthread_exit(NULL);
 }
