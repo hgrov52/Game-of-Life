@@ -97,17 +97,19 @@ struct thread_struct{
     short** ghost_above;
     short** ghost_below;
     int* i;
+    int* current_tick;
 };
 int rows_per_thread;
 int rows_per_rank;
 int my_rank;
 int num_ranks;
-int num_threads = 1;
+int num_threads = 2;
 int DEBUG = 0;
 int PRINT = 1;
 float threshold = 0.5;
-#define board_size 4//32768
-int num_ticks = 4;
+#define board_size 8//32768
+int num_ticks = 20;
+long long * tick_sums;
 
 /***************************************************************************/
 /* Function Decs ***********************************************************/
@@ -163,6 +165,8 @@ int main(int argc, char *argv[])
         int rows_per_thread = rows_per_rank/num_threads;
         printf("each of %d threads will have %d cells, %d rows\n",
             num_threads,cells_per_thread, rows_per_thread);
+
+        tick_sums = calloc(num_ticks,sizeof(long long));
     }
 
     // attempt to allocate dynamically in other functions (didnt work)
@@ -213,13 +217,14 @@ int main(int argc, char *argv[])
         
         pthread_t tid[num_threads];
         for(int i=0;i<num_threads;i++){
-            int thread_val = i;
 
             thread_data.ghost_above = &ghost_above;
             thread_data.ghost_below = &ghost_below;
             thread_data.board = &board;
             thread_data.i = malloc(sizeof(int *));
             *(thread_data.i) = i;
+            thread_data.current_tick = malloc(sizeof(int *));
+            *(thread_data.current_tick) = tick;
 
             // MPI_Barrier(MPI_COMM_WORLD);
             // for(int i = 0; i < num_ranks; ++i){
@@ -413,6 +418,7 @@ void deallocate_mem(short*** arr, int rows){
 }
 
 void print_board(short** board, int rows){
+    MPI_Barrier(MPI_COMM_WORLD);
     for(int i=0;i<rows;++i){
         for(int j=0;j<board_size;++j){
             printf("%hd",board[i][j]);
@@ -431,7 +437,7 @@ void print_row(short* row){
 void print(struct thread_struct * x){
     struct thread_struct thread_data = *x;
     print_board((*(thread_data.board)),rows_per_rank);
-    printf("\n");
+    //printf("\n");
 }
 
 void exchange_ghosts(struct thread_struct * x){
@@ -688,6 +694,17 @@ void apply_rules(struct thread_struct * x){
     }
 }
 
+long long sum_rank(struct thread_struct * x){
+    struct thread_struct thread_data = *x;
+    long long total = 0;
+    for(int i=0; i<rows_per_rank; i++){
+        for(int j=0; j<board_size; j++){
+            total += (*(thread_data.board))[i][j];
+        }
+    }
+    return total;
+}
+
 void* thread_init(void* x){
     InitDefault();
     struct thread_struct thread_data = *((struct thread_struct *)x);
@@ -706,11 +723,19 @@ void* thread_init(void* x){
             variables **if needed**.
     */
     if(PRINT){
-        print(x);
+        //print(x);
     }
     apply_rules(&thread_data);
     if(PRINT){
+        MPI_Barrier(MPI_COMM_WORLD);
         print(x);
+    }
+
+    long long rank_sum = sum_rank(x);
+    MPI_Reduce(&rank_sum, &tick_sums[*(thread_data.current_tick)], 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
+    if(my_rank==0 && PRINT){
+        printf("%lld alive on board\n\n", tick_sums[*(thread_data.current_tick)]);
     }
 
     pthread_exit(NULL);
