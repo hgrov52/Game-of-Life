@@ -117,8 +117,9 @@ int DEBUG = 1;
 int PRINT = 0;
 float threshold = 0.5;
 #define board_size 16//32768
-int num_ticks = 4;
+int num_ticks = 10;
 long long * tick_sums;
+
 
 /***************************************************************************/
 /* Function Decs ***********************************************************/
@@ -192,15 +193,20 @@ int main(int argc, char *argv[])
             board[rows_per_rank-1][2] = 2;
         }
 
-        if(my_rank==num_ranks-1){
+        if(my_rank==1){
             board[0][0] = 3;
+        } 
+        if(my_rank == num_ranks-1){
             board[rows_per_rank-1][board_size-1] = 4;
         }
-        if(num_ranks==1){
-            for(int i=0;i<board_size;i++){
-                ghost_above[i] = board[board_size-1][i];
-                ghost_below[i] = board[0][i];
-            }
+    }
+
+
+
+    if(num_ranks==1){
+        for(int i=0;i<board_size;i++){
+            ghost_above[i] = board[board_size-1][i];
+            ghost_below[i] = board[0][i];
         }
     }
   
@@ -224,39 +230,8 @@ int main(int argc, char *argv[])
             thread_data.current_tick = malloc(sizeof(int *));
             *(thread_data.current_tick) = tick;
 
-            // MPI_Barrier(MPI_COMM_WORLD);
-            // for(int i = 0; i < num_ranks; ++i){
-            //     if(i== my_rank){
-            //         printf("Rank: %d board\n", i);
-            //         print_board(*(thread_data.board), rows_per_thread);
-            //         printf("\n");
-            //     }
-            // }
-            // MPI_Barrier(MPI_COMM_WORLD);
-            /*  4
-                Exchange row data with MPI ranks 
-                using MPI_Isend/Irecv from thread 0 w/i each MPI rank.
-                Yes, you must correctly MPI_Test or Wait to make sure
-                messages operations correctly complete.
-
-                [Note: have only 1 MPI rank/pthread perform ALL MPI
-                operations per rank/thread group. Dont’ allow multiple
-                threads to perform any MPI operations within MPI
-                rank/thread group.]
-            */  
             
-            // if(my_rank==num_ranks-1 && i==num_threads-1){
-            //     printf("\nlast rank ghost row below:\n");
-            //     print_row(*(thread_data.ghost_below));
-            //     printf("\nlast rank ghost row above:\n");
-            //     print_row(*(thread_data.ghost_above));
-            // }
-
-            
-            /*  
-                Create Pthreads here. All threads should go into for loop
-            */
-            printf("making thread %d\n",*(thread_data.i));
+                       
             int rc = pthread_create(&tid[i], NULL, thread_init, &thread_data);
             if (rc != 0) {
                 fprintf(stderr, "ERROR: pthread_create() failed\n");
@@ -448,139 +423,82 @@ void print(struct thread_struct * x){
     //printf("\n");
 }
 
-void write_to_file(short** board){
-    // if(my_rank==0){
-    //     MPI_Status status;
-    //     MPI_File file;
-    //     MPI_File_open(MPI_COMM_WORLD, "./test.txt", MPI_MODE_CREATE, MPI_INFO_NULL, &file);
-    //     MPI_File_write(file,board,board_size,MPI_SHORT,&status);
-    //     MPI_File_close(&file);
-    //     printf("%lu \n",status.MPI_ERROR);
-    // }
-    // return;
-    printf("Rank %d writing to file...\n",my_rank);
+// void write_to_file(short** board){
+//     // if(my_rank==0){
+//     //     MPI_Status status;
+//     //     MPI_File file;
+//     //     MPI_File_open(MPI_COMM_WORLD, "./test.txt", MPI_MODE_CREATE, MPI_INFO_NULL, &file);
+//     //     MPI_File_write(file,board,board_size,MPI_SHORT,&status);
+//     //     MPI_File_close(&file);
+//     //     printf("%lu \n",status.MPI_ERROR);
+//     // }
+//     // return;
+//     printf("Rank %d writing to file...\n",my_rank);
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    MPI_Status status;
-    MPI_File file;
-    MPI_File_open(MPI_COMM_WORLD, "./test.txt", MPI_MODE_CREATE, MPI_INFO_NULL, &file);
+//     MPI_Barrier(MPI_COMM_WORLD);
+//     MPI_Status status;
+//     MPI_File file;
+//     MPI_File_open(MPI_COMM_WORLD, "./test.txt", MPI_MODE_CREATE, MPI_INFO_NULL, &file);
     
-    // writing each row individually because the write buffer wants a void*
-    for(int i=0;i<rows_per_rank;i++){
-        MPI_Offset offset = (my_rank * rows_per_rank + i) * board_size * sizeof(short);
-        printf("Rank %d thread %d writing to file at byte offset %lld\n",my_rank, i, offset);
-        MPI_File_write_at(file, offset, &(board[i]), board_size, MPI_SHORT, &status);
-    }    
+//     // writing each row individually because the write buffer wants a void*
+//     for(int i=0;i<rows_per_rank;i++){
+//         MPI_Offset offset = (my_rank * rows_per_rank + i) * board_size * sizeof(short);
+//         printf("Rank %d thread %d writing to file at byte offset %lld\n",my_rank, i, offset);
+//         MPI_File_write_at(file, offset, &(board[i]), board_size, MPI_SHORT, &status);
+//     }    
 
-    MPI_File_close(&file);
-    printf("Finished writing to file.\n");
-}
+//     MPI_File_close(&file);
+//     printf("Finished writing to file.\n");
+// }
 
 void exchange_ghosts(struct thread_struct * x){
     struct thread_struct thread_data = *x;
+    MPI_Request send_request, recv_request;
+    MPI_Status status;
+    /*  4
+        Exchange row data with MPI ranks 
+        using MPI_Isend/Irecv from thread 0 w/i each MPI rank.
+        Yes, you must correctly MPI_Test or Wait to make sure
+        messages operations correctly complete.
 
-    /*
+        [Note: have only 1 MPI rank/pthread perform ALL MPI
+        operations per rank/thread group. Dont’ allow multiple
+        threads to perform any MPI operations within MPI
+        rank/thread group.]
+    */  
+    MPI_Barrier(MPI_COMM_WORLD);
 
-    Cases where 2 Ranks could be working even though the code is wrong:
-        2 ranks, 4 threads, should have 8 print statements
-
-    */    
+    if(*(thread_data.i)==0){
+        if(my_rank>0){
+            MPI_Irecv(*(thread_data.ghost_above), board_size, MPI_SHORT, my_rank-1, 1, MPI_COMM_WORLD, &recv_request);
+            MPI_Wait(&recv_request, &status); 
+        }
+        MPI_Isend((*(thread_data.board))[rows_per_rank-1], board_size, MPI_SHORT, (my_rank+1)%num_ranks, 1, MPI_COMM_WORLD, &send_request);
+        MPI_Wait(&send_request, &status);
+        if(my_rank==0){
+            MPI_Irecv(*(thread_data.ghost_above), board_size, MPI_SHORT, num_ranks-1, 1, MPI_COMM_WORLD, &recv_request);
+            MPI_Wait(&recv_request, &status); 
+        }
+    }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    if(num_ranks>1 && *(thread_data.i)==0){
-        // tag of 0
-        MPI_Request send_request, recv_request;
-        MPI_Status status;
-        if(my_rank==0){
-            //very top ghost above receives from very last row 
-            MPI_Irecv(*(thread_data.ghost_below), board_size, MPI_SHORT, num_ranks-1, 0, MPI_COMM_WORLD, &recv_request);
-            //very top row sends to ghost below of last rank
-            MPI_Isend((*(thread_data.board))[0], board_size, MPI_SHORT, num_ranks-1, 1, MPI_COMM_WORLD, &send_request);
-            
-            if(DEBUG){
-                printf("%d receiving from %d (num_ranks-1)\n", my_rank, num_ranks-1);
-            }
+    if(*(thread_data.i)==num_threads-1){
+        if(my_rank<num_ranks-1){
+            MPI_Irecv(*(thread_data.ghost_below), board_size, MPI_SHORT, my_rank+1, 0, MPI_COMM_WORLD, &recv_request);
             MPI_Wait(&recv_request, &status);
-
-            if(DEBUG){
-                printf("%d sending to %d (num_ranks-1)\n", my_rank, num_ranks-1);
-            }
-            MPI_Wait(&send_request, &status);    
-
-
-            // printf("Rank %d, thread %d, receiving ghost row below from rank %d\n",my_rank, *(thread_data.i), num_ranks-1);
-            // print_row(*(thread_data.ghost_below));
         }
-
-        else{
-            //every normal ghost above receives from rank-1's last row
-            MPI_Irecv(*(thread_data.ghost_below), board_size, MPI_SHORT, my_rank-1, 1, MPI_COMM_WORLD, &recv_request);
-            //every top row above sends to rank-1's ghost below
-            MPI_Isend((*(thread_data.board))[0], board_size, MPI_SHORT, my_rank-1, 0, MPI_COMM_WORLD, &send_request);
-
-            if(DEBUG){
-                printf("%d receiving from %d (my_rank-1)\n", my_rank, my_rank-1);
-            }
-            MPI_Wait(&recv_request, &status); 
-
-            if(DEBUG){
-                printf("%d sending to %d (my_rank-1)\n", my_rank, my_rank-1);
-            }
-            MPI_Wait(&send_request, &status);
-
-
-            // printf("Rank %d, thread %d, receiving ghost row below from rank %d\n",my_rank, *(thread_data.i), my_rank-1);
-            // print_row(*(thread_data.ghost_below));
+        int send_to = (my_rank-1)%num_ranks;
+        if(send_to==-1){
+            send_to = num_ranks-1;
         }
-    }
-    if(num_ranks>1 && *(thread_data.i)==num_threads-1){
-        printf("HEREEEEEEEEEEEEEEEEEEEEEEE\n");
-        // tag of 1
-        MPI_Request send_request, recv_request;
-        MPI_Status status;
-        
+        MPI_Isend((*(thread_data.board))[0], board_size, MPI_SHORT, send_to, 0, MPI_COMM_WORLD, &send_request);
+        MPI_Wait(&send_request, &status);
         if(my_rank==num_ranks-1){
-            //very bottom ghost below receives from very top row
-            MPI_Irecv(*(thread_data.ghost_above), board_size, MPI_SHORT, 0, 1, MPI_COMM_WORLD, &recv_request);
-            //very bottom row sends to ghost above of first rank
-            MPI_Isend((*(thread_data.board))[rows_per_rank-1], board_size, MPI_SHORT, 0, 0, MPI_COMM_WORLD, &send_request);
-            
-            if(DEBUG){
-                printf("%d receiving from %d (0)\n", my_rank, 0);
-            }
+            MPI_Irecv(*(thread_data.ghost_below), board_size, MPI_SHORT, 0, 0, MPI_COMM_WORLD, &recv_request);
             MPI_Wait(&recv_request, &status); 
-
-            if(DEBUG){
-                printf("%d sending to %d (0)\n", my_rank, 0);
-            }
-            MPI_Wait(&send_request, &status);
-
-            // printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",my_rank, *(thread_data.i), 0);
-            // print_row(*(thread_data.ghost_above));
-
-        }
-
-        else{
-            //every normal ghost below receives form rank+1's first row
-            MPI_Irecv(*(thread_data.ghost_above), board_size, MPI_SHORT, my_rank+1, 0, MPI_COMM_WORLD, &recv_request);
-            //every normal bottom row sends to rank+1's ghost above
-            MPI_Isend((*(thread_data.board))[rows_per_rank-1], board_size, MPI_SHORT, my_rank+1, 1, MPI_COMM_WORLD, &send_request);
-            
-            if(DEBUG){
-                printf("%d receiving from %d (my_rank+1)\n", my_rank, my_rank+1);
-            }
-            MPI_Wait(&recv_request, &status); 
-            
-            if(DEBUG){
-                printf("%d sending to %d (my_rank+1)\n", my_rank, my_rank+1);
-            }
-            MPI_Wait(&send_request, &status);
-
-
-            // printf("Rank %d, thread %d, receiving ghost row above from rank %d\n",my_rank, *(thread_data.i), my_rank+1);
-            // print_row(*(thread_data.ghost_above));
         }
     }
+    // ==================================================
 }
 
 int get_state(struct thread_struct * x, int row, int col){
@@ -701,22 +619,12 @@ long long sum_rank(struct thread_struct * x){
     return total;
 }
 
+void bin_board(struct thread_struct * x){
+    struct thread_struct thread_data = *x;
+
+}
+
 void* thread_init(void* x){
-
-    
-    struct thread_struct thread_data = *((struct thread_struct *)x);
-    printf("Rank %d, thread %d entering init function\n", my_rank, *(thread_data.i));
-
-
-
-
-
-
-    exchange_ghosts(&thread_data);
-    MPI_Barrier(MPI_COMM_WORLD);
-    printf("thread %d here\n",*(thread_data.i));
-    
-
     /*  5
         HERE each PTHREAD can process a row:
         - update universe making sure to use the
@@ -728,16 +636,31 @@ void* thread_init(void* x){
         - use pthread_mutex_trylock around shared counter
             variables **if needed**.
     */
-    if(PRINT){
-        //print(x);
-    }
-    apply_rules(&thread_data);
+
+    struct thread_struct thread_data = *((struct thread_struct *)x);
+
+    exchange_ghosts(&thread_data);
     if(PRINT){
         MPI_Barrier(MPI_COMM_WORLD);
+        printf("\n");
         print(x);
     }
 
+    // test ghost row exchange
+    // MPI_Barrier(MPI_COMM_WORLD);
+    // if(my_rank==0){
+    //     printf("\n");
+    //     print_row(*(thread_data.ghost_above));
+    //     print_row(*(thread_data.ghost_below));
+    // }
 
+    apply_rules(&thread_data);
+    if(PRINT){
+        MPI_Barrier(MPI_COMM_WORLD);
+        printf("\n");
+        print(x);
+    }
+    
     long long rank_sum = sum_rank(x);
     MPI_Reduce(&rank_sum, &tick_sums[*(thread_data.current_tick)], 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
