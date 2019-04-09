@@ -32,7 +32,7 @@ we do row by row, using previous changed values as new neighbor values.
 
 Randomness: random value for every cell each tick, if below some threshold, 
     apply a random state
-
+ 
 ___________________________________________________________
 
 4/8/19 
@@ -112,13 +112,14 @@ int rows_per_thread;
 int rows_per_rank;
 int my_rank;
 int num_ranks;
-int num_threads = 4;
+int num_threads = 8;
 int DEBUG = 1;
-int PRINT = 1;
+int PRINT = 0;
 float threshold = 0.5;
-#define board_size 16//32768
-int num_ticks = 10;
+#define board_size 64//32768
+int num_ticks = 1;
 long long * tick_sums;
+int num_bins = 8;
 
 
 /***************************************************************************/
@@ -138,7 +139,8 @@ void print_row(short* row);
 void copy_thread_rows_to_universe(short*** board, short*** thread_board, int rows, int start);
 void copy_ghost_row_to_universe(short** ghost, short** thread_ghost);
 short* copy_row(short* ghost_row);
-void write_to_file(short** board);
+void write_to_file(short** board, int h, int w);
+void bin_board(struct thread_struct * x);
 
 /***************************************************************************/
 /* Function: Main **********************************************************/
@@ -187,22 +189,6 @@ int main(int argc, char *argv[])
     short* ghost_above = make_ghost_row();
     short* ghost_below = make_ghost_row(); 
 
-    if(DEBUG){
-        if(my_rank==0){
-            board[0][1] = 0;
-            board[rows_per_rank-1][2] = 2;
-        }
-
-        if(my_rank==1){
-            board[0][0] = 3;
-        } 
-        if(my_rank == num_ranks-1){
-            board[rows_per_rank-1][board_size-1] = 4;
-        }
-    }
-
-
-
     if(num_ranks==1){
         for(int i=0;i<board_size;i++){
             ghost_above[i] = board[board_size-1][i];
@@ -210,9 +196,6 @@ int main(int argc, char *argv[])
         }
     }
   
-    /*  3
-        For all number of ticks, complete a round of the GOL
-    */
     struct thread_struct thread_data;
     for(int tick=0; tick<num_ticks; tick++){
         if(PRINT){
@@ -229,90 +212,20 @@ int main(int argc, char *argv[])
             *(thread_data.i) = i;
             thread_data.current_tick = malloc(sizeof(int *));
             *(thread_data.current_tick) = tick;
-
-            
-                       
+          
             int rc = pthread_create(&tid[i], NULL, thread_init, &thread_data);
             if (rc != 0) {
                 fprintf(stderr, "ERROR: pthread_create() failed\n");
             }
-
             pthread_join(tid[i], NULL);
-            //pthread_exit(NULL);
-            //pthread_exit(NULL);
-            
-        }
-        
-        // for(int i=0;i<num_threads;i++){
-        //     pthread_join(tid[i], NULL);
-        // }
-
-        // if(DEBUG){       
-        //     printf("\n Rank %d ghost row below:\n", my_rank);
-        //     print_row(ghost_below);
-        //     printf("\n Rank %d ghost row above:\n", my_rank);
-        //     print_row(ghost_above);
-        // }
-
-        
-
-
-        /*  5
-            HERE each PTHREAD can process a row:
-            - update universe making sure to use the
-                correct row RNG stream
-            - factor in Threshold percentage as described
-            - use the right "ghost" row data at rank boundaries
-            - keep track of total number of ALIVE cells per tick
-                across all threads w/i a MPI rank group.
-            - use pthread_mutex_trylock around shared counter
-                variables **if needed**.
-        */
+        }    
     }
-
-
-    /*  6
-        MPI_Reduce( Sum all ALIVE Cells Counts For Each Tick);
-        - Here, you will have vector of 256 ALIVE cell sum
-        values which is the total number of ALIVE cells
-        at each tick, t for all 256 ticks.
-    */
-
-
-    /*  7
-        if rank 0 / thread 0, end time with GetTimeBase().
-        if needed by experiment,
-        perform output of 32Kx32K cell universe using MPI_file_write_at;
-        collect I/O performance stats using GetTimeBase() from
-        rank 0 / thread 0;
-        if needed by experiment,
-        construct 1Kx1K heatmap of 32Kx32K cell universe using MPI
-        collective operations of your choice. Rank 0 will output
-        the heatmap to a standard Unix file given it’s small 1 to 4MB size.
-        Make sure you an import data for graphing.
-        if rank 0, print ALIVE tick stats and compute (I/O if needed)
-        performance stats.
-    */
     g_end_cycles = GetTimeBase();
 
-    //write_to_file(board);
+    MPI_Barrier(MPI_COMM_WORLD);
+    write_to_file(board, board_size, board_size);
 
-
-
-
-
-
-    // Deallocate memory
-    
-    // for (int i = 0; i<rows_per_thread; i++){
-    //     free(board[i]);
-    // }
-    // free(board); 
-    // free(ghost_above);
-    // free(ghost_below);
-
-    
-    
+    //bin_board(&thread_data);
 
     // =========================================================
     // =========================================================
@@ -337,6 +250,19 @@ short** make_board(int rows){
     for(int i=0;i<rows;++i){
         for(int j=0;j<board_size;++j){
             board[i][j] = ALIVE;
+        }
+    }
+    return board;   
+}
+short** make_board_cols(int rows, int cols){
+    short** board = calloc(rows,sizeof(short*));
+    for(int i=0;i<rows;++i){
+        board[i] = calloc(cols,sizeof(short));
+    }
+
+    for(int i=0;i<rows;++i){
+        for(int j=0;j<cols;++j){
+            board[i][j] = 0;
         }
     }
     return board;   
@@ -423,33 +349,54 @@ void print(struct thread_struct * x){
     //printf("\n");
 }
 
-// void write_to_file(short** board){
-//     // if(my_rank==0){
-//     //     MPI_Status status;
-//     //     MPI_File file;
-//     //     MPI_File_open(MPI_COMM_WORLD, "./test.txt", MPI_MODE_CREATE, MPI_INFO_NULL, &file);
-//     //     MPI_File_write(file,board,board_size,MPI_SHORT,&status);
-//     //     MPI_File_close(&file);
-//     //     printf("%lu \n",status.MPI_ERROR);
-//     // }
-//     // return;
-//     printf("Rank %d writing to file...\n",my_rank);
+void write_to_file(short** board, int h, int w){
+    // if(my_rank==0){
+    //     MPI_Status status;
+    //     MPI_File file;
+    //     MPI_File_open(MPI_COMM_SELF, "test.txt", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &file);
+    //     MPI_File_write(file,*board,4,MPI_SHORT,&status);
+    //     MPI_File_close(&file);
+    // }
+    // return;
+    printf("Rank %d writing to file...\n",my_rank);
+    h = h/num_ranks;
 
-//     MPI_Barrier(MPI_COMM_WORLD);
-//     MPI_Status status;
-//     MPI_File file;
-//     MPI_File_open(MPI_COMM_WORLD, "./test.txt", MPI_MODE_CREATE, MPI_INFO_NULL, &file);
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Status status;
+    MPI_File file;
+    MPI_File_open(MPI_COMM_SELF, "./test.txt", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &file);
     
-//     // writing each row individually because the write buffer wants a void*
-//     for(int i=0;i<rows_per_rank;i++){
-//         MPI_Offset offset = (my_rank * rows_per_rank + i) * board_size * sizeof(short);
-//         printf("Rank %d thread %d writing to file at byte offset %lld\n",my_rank, i, offset);
-//         MPI_File_write_at(file, offset, &(board[i]), board_size, MPI_SHORT, &status);
-//     }    
+    // writing each row individually because the write buffer wants a void*
+    MPI_Barrier(MPI_COMM_WORLD);
+    printf("w is %d\n",w);
+    for(int i=0;i<h;i++){
 
-//     MPI_File_close(&file);
-//     printf("Finished writing to file.\n");
-// }
+        // printf("Rank %d thread %d writing to file at byte offset\n",my_rank, i);
+        // for(int j=0;j<w-1;j+=2){
+        //     MPI_Offset offset = ((my_rank * h + i) * 2*w +j) * sizeof(short);
+        //     char c[2];
+        //     c[0] = (board[i][j]+'0');
+        //     c[1] = ',';
+        //     MPI_File_write_at(file, offset, c, 2*sizeof(short), MPI_SHORT, &status);
+        // }
+
+        // ==================================
+        int line_alloc = w+2;
+        char string[line_alloc];
+        for(int j=0;j<w;j++){
+            string[j] = 1+'0';
+        }
+        string[line_alloc - 2] = '\n';
+        string[line_alloc - 1] = '\0';
+        MPI_Offset offset = (my_rank * h  + i)*line_alloc;
+        printf("Rank %d offset %lld printing %s\n",my_rank,offset,string);
+        MPI_File_write_at(file, offset, string, strlen(string), MPI_CHAR, &status);
+        //MPI_File_write(file,string,strlen(string),MPI_CHAR,&status);
+    }    
+
+    MPI_File_close(&file);
+    printf("Finished writing to file.\n");
+}
 
 void exchange_ghosts(struct thread_struct * x){
     struct thread_struct thread_data = *x;
@@ -621,6 +568,20 @@ long long sum_rank(struct thread_struct * x){
 
 void bin_board(struct thread_struct * x){
     struct thread_struct thread_data = *x;
+    printf("%d\n",*(thread_data.i));
+
+    // the number of cells being summed into each bin
+    int length_of_bin = board_size/num_bins;
+
+    // the vertical number of bins going in each rank
+    int num_vertical_bins = num_bins/num_threads;
+
+    // for each row in each rank
+    for(int row=0;row<rows_per_rank;row++){
+        for(int bin=0;bin<num_bins;bin++){
+
+        }
+    }
 
 }
 

@@ -360,6 +360,7 @@ void write_to_file(short** board, int h, int w){
     // return;
     printf("Rank %d writing to file...\n",my_rank);
     h = h/num_ranks;
+    w = w+1;
 
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Status status;
@@ -368,6 +369,7 @@ void write_to_file(short** board, int h, int w){
     
     // writing each row individually because the write buffer wants a void*
     MPI_Barrier(MPI_COMM_WORLD);
+    printf("h is %d\n",h);
     printf("w is %d\n",w);
     for(int i=0;i<h;i++){
 
@@ -382,15 +384,15 @@ void write_to_file(short** board, int h, int w){
 
         // ==================================
         
-        char string[w+2];
+        char string[w+1];
         for(int i=0;i<w;i++){
             string[i] = 1+'0';
         }
         string[w] = '\n';
-        string[w+1] = '\0';
-        MPI_Offset offset = (my_rank * h  + i)*w;
+        //string[w+1] = '\0';
+        MPI_Offset offset = (my_rank * h  + i)*(w+1);
         printf("Rank %d offset %lld printing %s\n",my_rank,offset,string);
-        MPI_File_write_at(file, offset, string, strlen(string), MPI_CHAR, &status);
+        MPI_File_write_at(file, offset, string, w+1, MPI_CHAR, &status);
         //MPI_File_write(file,string,strlen(string),MPI_CHAR,&status);
     }    
 
