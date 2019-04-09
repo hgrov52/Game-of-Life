@@ -367,7 +367,8 @@ void write_to_file(short** board, int h, int w){
     MPI_File_open(MPI_COMM_SELF, "./test.txt", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &file);
     
     // writing each row individually because the write buffer wants a void*
-    
+    MPI_Barrier(MPI_COMM_WORLD);
+    printf("w is %d\n",w);
     for(int i=0;i<h;i++){
 
         // printf("Rank %d thread %d writing to file at byte offset\n",my_rank, i);
@@ -381,13 +382,14 @@ void write_to_file(short** board, int h, int w){
 
         // ==================================
         
-        char string[10];
-        for(int i=0;i<10;i++){
-            string[i] = i+'0';
+        char string[w+2];
+        for(int i=0;i<w;i++){
+            string[i] = 1+'0';
         }
-        string[9] = '\n';
-        MPI_Offset offset = (my_rank * h + i);
-        printf("Rank %d offset: %lld\n",my_rank,offset);
+        string[w] = '\n';
+        string[w+1] = '\0';
+        MPI_Offset offset = (my_rank * h  + i)*w;
+        printf("Rank %d offset %lld printing %s\n",my_rank,offset,string);
         MPI_File_write_at(file, offset, string, strlen(string), MPI_CHAR, &status);
         //MPI_File_write(file,string,strlen(string),MPI_CHAR,&status);
     }    
