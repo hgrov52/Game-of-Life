@@ -76,23 +76,7 @@ Issues - deadlock when used with more than 2 mpi ranks
 
 /***************************************************************************/
 /* Global Vars *************************************************************/
-/***************************************************************************/
-
-/*********************************/
-// // MUTEX - ING
-// pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-
-// /** START MUTEX HERE  **/
-// pthread_mutex_lock( &mutex );
-
-// /* THIS CODE IS MUTEXED!!! */
-
-// pthread_mutex_unlock( &mutex );
-// /* END MUTEX HERE     **/
-
-
-/*******************************/
- 
+/***************************************************************************/ 
  
 double g_time_in_secs = 0;
 double g_processor_frequency = 1600000000.0; // processing speed for BG/Q
@@ -112,14 +96,27 @@ int rows_per_thread;
 int rows_per_rank;
 int my_rank;
 int num_ranks;
+
+// %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+// CONTROL AREA
+// %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 int num_threads = 8;
 int DEBUG = 1;
 int PRINT = 0;
 float threshold = 0.5;
 #define board_size 64//32768
-int num_ticks = 1;
+int num_ticks = 10;
 long long * tick_sums;
 int num_bins = 8;
+int io = 1;
+// %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+// DONT EDIT BEYOND HERE
+// %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+// for output on BGmfQ
+char* master_filename_title = "Config_1.txt";
+FILE * master_file;
+
 
 
 /***************************************************************************/
@@ -135,7 +132,6 @@ void exchange_ghosts(struct thread_struct * x);
 void* thread_init(void*);
 void print_row(short* row);
 void write_to_file(short** board, int h, int w);
-void bin_board(struct thread_struct * x);
 
 /***************************************************************************/
 /* Function: Main **********************************************************/
@@ -162,40 +158,39 @@ int main(int argc, char *argv[])
     // if rank 0 / pthread0, start time with GetTimeBase() 
     if(my_rank == 0){
         g_start_cycles = GetTimeBase();
-        
-        // sanity check
-        printf("Board size: %d x %d\n", board_size, board_size);
-        int cells_per_rank = board_size*(board_size/num_ranks);
-        int rows_per_rank = board_size/num_ranks;
-        printf("each of %d ranks will have %d cells, %d rows, %d ghost rows\n",
-            num_ranks,cells_per_rank, rows_per_rank, 2);
-        int cells_per_thread = cells_per_rank/num_threads;
-        int rows_per_thread = rows_per_rank/num_threads;
-        printf("each of %d threads will have %d cells, %d rows\n",
-            num_threads,cells_per_thread, rows_per_thread);
-
         tick_sums = calloc(num_ticks,sizeof(long long));
+        printf("Opening %s\n",master_filename_title);
+        master_file = fopen(master_filename_title, "ab+");
+        fprintf(master_file,"%s","~~~Begin File~~~\n");
+        fprintf(master_file, "\nBoard is %dx%d\n", board_size,board_size);
+        fprintf(master_file, "Number of Ranks: %d\n", num_ranks);
+        fprintf(master_file, "Number of Threads: %d\n", num_threads);
+        fprintf(master_file, "Number of Ticks: %d\n", num_ticks);
+        fprintf(master_file, "Threshold set to %f%\n", threshold);
     }
     
+    // set some helpful global vars
     rows_per_rank = board_size/num_ranks; 
     rows_per_thread = rows_per_rank/num_threads;
 
+    // initialize the board for each rank, these will be 
+    // the only board and ghost allocations
     short** board = make_board(rows_per_rank);
     short* ghost_above = make_ghost_row();
     short* ghost_below = make_ghost_row(); 
 
+    // if only one master rank, ghost rows are needed still 
+    // but are never reset after this point
     if(num_ranks==1){
         for(int i=0;i<board_size;i++){
             ghost_above[i] = board[board_size-1][i];
             ghost_below[i] = board[0][i];
         }
     }
-  
+
     struct thread_struct thread_data;
     for(int tick=0; tick<num_ticks; tick++){
-        if(PRINT){
-            printf("Generation %d\n",tick+1);    
-        }
+        
         
         pthread_t tid[num_threads];
         for(int i=0;i<num_threads;i++){
@@ -218,9 +213,34 @@ int main(int argc, char *argv[])
     g_end_cycles = GetTimeBase();
 
     MPI_Barrier(MPI_COMM_WORLD);
-    write_to_file(board, 16, 8);
 
-    //bin_board(&thread_data);
+    if(io){
+        unsigned long long start_io_time = GetTimeBase();
+        write_to_file(board, board_size, board_size);
+        unsigned long long end_io_time = GetTimeBase();
+        if(my_rank==0){
+            int time_in_secs = ((double)(end_io_time - start_io_time)) / g_processor_frequency;
+            fprintf(master_file, "\nParallel I/O time: %ds\n\n", time_in_secs);      
+        }
+        
+    }
+    else{
+        if(my_rank==0){
+            fprintf(master_file, "\n%s\n\n", "I/O is turned off for this configuration");
+        }
+    }
+
+    if(my_rank==0){
+        fprintf(master_file,"Alive after each generation:\n["); 
+        for(int i=0;i<num_ticks;i++){
+            fprintf(master_file,"%lld, ", tick_sums[i]);
+        } 
+        fprintf(master_file,"]\n\n");
+        
+        int time_in_secs = ((double)(g_end_cycles - g_start_cycles)) / g_processor_frequency;
+        fprintf(master_file,"Total execution time: %ds\n",time_in_secs);
+        fclose(master_file);
+    }
 
     // =========================================================
     // =========================================================
@@ -271,41 +291,6 @@ short* make_ghost_row(){
     return ghost;
 }
 
-
-
-short* copy_row(short* ghost_row){
-    short* new_ghost_row = make_ghost_row();
-    for(int i=0;i<board_size;++i){
-        new_ghost_row[i] = ghost_row[i];
-        
-    }
-    return new_ghost_row;
-}
-
-short** copy_board_with_start(short** board, int rows, int start){
-    short** new_board = make_board(rows);
-    for(int i=0;i<rows;++i){
-        for(int j=0;j<board_size;++j){
-            new_board[i][j] = board[i+start][j];
-        }
-    }
-    return new_board;
-}
-
-void copy_thread_rows_to_universe(short*** board, short*** thread_board, int rows, int start){
-    for(int i=0;i<rows;++i){
-        for(int j=0;j<board_size;++j){
-            *board[i+start][j] = *thread_board[i][j];
-        }
-    }
-}
-
-void copy_ghost_row_to_universe(short** ghost, short** thread_ghost){
-    for(int i=0;i<board_size;++i){
-        *ghost[i] = *thread_ghost[i];   
-    }
-}
-
 void deallocate_mem(short*** arr, int rows){
     for (short i = 0; i<rows; i++){
         free((*arr)[i]);
@@ -333,35 +318,20 @@ void print_row(short* row){
 void print(struct thread_struct * x){
     struct thread_struct thread_data = *x;
     print_board((*(thread_data.board)),rows_per_rank);
-    //printf("\n");
 }
 
 void write_to_file(short** board, int h, int w){
-    // if(my_rank==0){
-    //     MPI_Status status;
-    //     MPI_File file;
-    //     MPI_File_open(MPI_COMM_SELF, "test.txt", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &file);
-    //     MPI_File_write(file,*board,4,MPI_SHORT,&status);
-    //     MPI_File_close(&file);
-    // }
-    // return;
-    printf("Rank %d writing to file...\n",my_rank);
     h = h/num_ranks;
     w = w+2;
 
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Status status;
     MPI_File file;
-    MPI_File_open(MPI_COMM_SELF, "./test.txt", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &file);
+    MPI_File_open(MPI_COMM_SELF, "./test_output.txt", MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &file);
     
     // writing each row individually because the write buffer wants a void*
     MPI_Barrier(MPI_COMM_WORLD);
     for(int i=0;i<h;i++){
-
-       
-        // stop undoing
-        // ==================================
-        
         char string[w];
         for(int i=0;i<w-1;i++){
             string[i] = 1+'0';
@@ -370,11 +340,8 @@ void write_to_file(short** board, int h, int w){
         MPI_Offset offset = (my_rank * h  + i)*(w);
         //printf("Rank %d offset %lld printing %s\n",my_rank,offset,string);
         MPI_File_write_at(file, offset, string, w, MPI_CHAR, &status);
-        //MPI_File_write(file,string,strlen(string),MPI_CHAR,&status);
     }    
-
     MPI_File_close(&file);
-    printf("Finished writing to file.\n");
 }
 
 void exchange_ghosts(struct thread_struct * x){
@@ -545,24 +512,7 @@ long long sum_rank(struct thread_struct * x){
     return total;
 }
 
-void bin_board(struct thread_struct * x){
-    struct thread_struct thread_data = *x;
-    printf("%d\n",*(thread_data.i));
 
-    // the number of cells being summed into each bin
-    int length_of_bin = board_size/num_bins;
-
-    // the vertical number of bins going in each rank
-    int num_vertical_bins = num_bins/num_threads;
-
-    // for each row in each rank
-    for(int row=0;row<rows_per_rank;row++){
-        for(int bin=0;bin<num_bins;bin++){
-
-        }
-    }
-
-}
 
 void* thread_init(void* x){
     /*  5
@@ -604,9 +554,7 @@ void* thread_init(void* x){
     long long rank_sum = sum_rank(x);
     MPI_Reduce(&rank_sum, &tick_sums[*(thread_data.current_tick)], 1, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     MPI_Barrier(MPI_COMM_WORLD);
-    if(my_rank==0 && PRINT){
-        printf("%lld alive on board\n\n", tick_sums[*(thread_data.current_tick)]);
-    }
+    
 
     pthread_exit(NULL);
     return NULL;

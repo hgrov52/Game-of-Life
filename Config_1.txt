@@ -1,0 +1,13 @@
+~~~Begin File~~~
+
+Board is 64x64
+Number of Ranks: 8
+Number of Threads: 8
+Number of Ticks: 10
+
+Parallel I/O time: 0s
+
+Alive after each generation:
+[1640, 1744, 1768, 1760, 1800, 1760, 1808, 1760, 1824, 1752, ]
+
+Total execution time: 0s
