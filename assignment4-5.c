@@ -131,14 +131,9 @@ short** make_board(int rows);
 void deallocate_mem(short*** arr, int rows);
 void print_board(short** board, int rows);
 short* make_ghost_row();
-short** copy_board(short** board, int rows);
 void exchange_ghosts(struct thread_struct * x);
 void* thread_init(void*);
-short** copy_board_with_start(short** board, int rows, int start);
 void print_row(short* row);
-void copy_thread_rows_to_universe(short*** board, short*** thread_board, int rows, int start);
-void copy_ghost_row_to_universe(short** ghost, short** thread_ghost);
-short* copy_row(short* ghost_row);
 void write_to_file(short** board, int h, int w);
 void bin_board(struct thread_struct * x);
 
@@ -223,7 +218,7 @@ int main(int argc, char *argv[])
     g_end_cycles = GetTimeBase();
 
     MPI_Barrier(MPI_COMM_WORLD);
-    write_to_file(board, board_size, board_size);
+    write_to_file(board, 16, 8);
 
     //bin_board(&thread_data);
 
@@ -276,15 +271,7 @@ short* make_ghost_row(){
     return ghost;
 }
 
-short** copy_board(short** board, int rows){
-    short** new_board = make_board(rows);
-    for(int i=0;i<rows;++i){
-        for(int j=0;j<board_size;++j){
-            new_board[i][j] = board[i][j];
-        }
-    }
-    return new_board;
-}
+
 
 short* copy_row(short* ghost_row){
     short* new_ghost_row = make_ghost_row();
@@ -360,7 +347,7 @@ void write_to_file(short** board, int h, int w){
     // return;
     printf("Rank %d writing to file...\n",my_rank);
     h = h/num_ranks;
-    w = w+1;
+    w = w+2;
 
     MPI_Barrier(MPI_COMM_WORLD);
     MPI_Status status;
@@ -369,30 +356,20 @@ void write_to_file(short** board, int h, int w){
     
     // writing each row individually because the write buffer wants a void*
     MPI_Barrier(MPI_COMM_WORLD);
-    printf("h is %d\n",h);
-    printf("w is %d\n",w);
     for(int i=0;i<h;i++){
 
-        // printf("Rank %d thread %d writing to file at byte offset\n",my_rank, i);
-        // for(int j=0;j<w-1;j+=2){
-        //     MPI_Offset offset = ((my_rank * h + i) * 2*w +j) * sizeof(short);
-        //     char c[2];
-        //     c[0] = (board[i][j]+'0');
-        //     c[1] = ',';
-        //     MPI_File_write_at(file, offset, c, 2*sizeof(short), MPI_SHORT, &status);
-        // }
-
+       
+        // stop undoing
         // ==================================
         
-        char string[w+1];
-        for(int i=0;i<w;i++){
+        char string[w];
+        for(int i=0;i<w-1;i++){
             string[i] = 1+'0';
         }
-        string[w] = '\n';
-        //string[w+1] = '\0';
-        MPI_Offset offset = (my_rank * h  + i)*(w+1);
-        printf("Rank %d offset %lld printing %s\n",my_rank,offset,string);
-        MPI_File_write_at(file, offset, string, w+1, MPI_CHAR, &status);
+        string[w-1] = '\n';
+        MPI_Offset offset = (my_rank * h  + i)*(w);
+        //printf("Rank %d offset %lld printing %s\n",my_rank,offset,string);
+        MPI_File_write_at(file, offset, string, w, MPI_CHAR, &status);
         //MPI_File_write(file,string,strlen(string),MPI_CHAR,&status);
     }    
 
