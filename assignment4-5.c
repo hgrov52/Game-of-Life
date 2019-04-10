@@ -100,21 +100,21 @@ int num_ranks;
 // %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 // CONTROL AREA
 // %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-int num_threads = 8;
-int DEBUG = 1;
+int num_threads = 1;
+int DEBUG = 0;
 int PRINT = 0;
-float threshold = 0.5;
-#define board_size 64//32768
-int num_ticks = 10;
+float threshold = 0.0;
+#define board_size 32768
+int num_ticks = 256;
 long long * tick_sums;
-int num_bins = 8;
+int num_bins = 1024;
 int io = 1;
 // %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 // DONT EDIT BEYOND HERE
 // %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 // for output on BGmfQ
-char* master_filename_title = "Config_1.txt";
+char* master_filename_title = "./Config_1.txt";
 FILE * master_file;
 
 
@@ -154,20 +154,26 @@ int main(int argc, char *argv[])
     // =========================================================
     // =========================================================
     
+    // master thread does no computation, its all done in thread init
+    if(num_threads==0){
+        num_threads+=1;
+    }
 
     // if rank 0 / pthread0, start time with GetTimeBase() 
     if(my_rank == 0){
         g_start_cycles = GetTimeBase();
         tick_sums = calloc(num_ticks,sizeof(long long));
         printf("Opening %s\n",master_filename_title);
-        master_file = fopen(master_filename_title, "ab+");
+        master_file = fopen(master_filename_title, "w");
         fprintf(master_file,"%s","~~~Begin File~~~\n");
+        printf("Should have written\n");
         fprintf(master_file, "\nBoard is %dx%d\n", board_size,board_size);
         fprintf(master_file, "Number of Ranks: %d\n", num_ranks);
         fprintf(master_file, "Number of Threads: %d\n", num_threads);
         fprintf(master_file, "Number of Ticks: %d\n", num_ticks);
-        fprintf(master_file, "Threshold set to %f%\n", threshold);
+        fprintf(master_file, "Threshold set to %.2f\n", threshold);
     }
+    MPI_Barrier(MPI_COMM_WORLD);
     
     // set some helpful global vars
     rows_per_rank = board_size/num_ranks; 
@@ -190,6 +196,10 @@ int main(int argc, char *argv[])
 
     struct thread_struct thread_data;
     for(int tick=0; tick<num_ticks; tick++){
+        if(my_rank==0){
+            printf("tick: %d\n",tick);
+        }
+        
         
         
         pthread_t tid[num_threads];
@@ -215,11 +225,14 @@ int main(int argc, char *argv[])
     MPI_Barrier(MPI_COMM_WORLD);
 
     if(io){
+		if(my_rank==0) printf("Begin Parallel Write\n");
         unsigned long long start_io_time = GetTimeBase();
         write_to_file(board, board_size, board_size);
         unsigned long long end_io_time = GetTimeBase();
+	
         if(my_rank==0){
-            int time_in_secs = ((double)(end_io_time - start_io_time)) / g_processor_frequency;
+        	printf("End Parallel Write\n");
+            int time_in_secs = ((double)(end_io_time - start_io_time));// / g_processor_frequency;
             fprintf(master_file, "\nParallel I/O time: %ds\n\n", time_in_secs);      
         }
         
@@ -237,7 +250,7 @@ int main(int argc, char *argv[])
         } 
         fprintf(master_file,"]\n\n");
         
-        int time_in_secs = ((double)(g_end_cycles - g_start_cycles)) / g_processor_frequency;
+        int time_in_secs = ((double)(g_end_cycles - g_start_cycles));// / g_processor_frequency;
         fprintf(master_file,"Total execution time: %ds\n",time_in_secs);
         fclose(master_file);
     }
@@ -331,13 +344,13 @@ void write_to_file(short** board, int h, int w){
     
     // writing each row individually because the write buffer wants a void*
     MPI_Barrier(MPI_COMM_WORLD);
-    for(int i=0;i<h;i++){
+    for(int j=0;j<h;j++){
         char string[w];
         for(int i=0;i<w-1;i++){
-            string[i] = 1+'0';
+            string[i] = board[j][i]+'0';
         }
         string[w-1] = '\n';
-        MPI_Offset offset = (my_rank * h  + i)*(w);
+        MPI_Offset offset = (my_rank * h  + j)*(w);
         //printf("Rank %d offset %lld printing %s\n",my_rank,offset,string);
         MPI_File_write_at(file, offset, string, w, MPI_CHAR, &status);
     }    

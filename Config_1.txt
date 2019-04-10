@@ -1,13 +1,42 @@
 ~~~Begin File~~~
 
-Board is 64x64
+Board is 2048x2048
+Number of Ranks: 64
+Number of Threads: 1
+Number of Ticks: 20
+Threshold set to 0.25
+
+I/O is turned off for this configuration
+
+Alive after each generation:
+[515904, 814528, 897152, 1015104, 1083264, 1150784, 1201088, 1252800, 1288448, 1324032, 1358592, 1382592, 1407744, 1430720, 1455488, 1466432, 1491264, 1498944, 1514368, 1519616, ]
+
+Total execution time: 0s
+~~~Begin File~~~
+
+Board is 2048x2048
 Number of Ranks: 8
-Number of Threads: 8
-Number of Ticks: 10
+Number of Threads: 1
+Number of Ticks: 20
+Threshold set to 0.25
 
 Parallel I/O time: 0s
 
 Alive after each generation:
-[1640, 1744, 1768, 1760, 1800, 1760, 1808, 1760, 1824, 1752, ]
+[523856, 840648, 923136, 1034024, 1111440, 1177488, 1232928, 1276440, 1317536, 1348920, 1380328, 1405184, 1428168, 1447552, 1463160, 1477928, 1491864, 1503896, 1515552, 1523440, ]
+
+Total execution time: 0s
+~~~Begin File~~~
+
+Board is 2048x2048
+Number of Ranks: 8
+Number of Threads: 1
+Number of Ticks: 20
+Threshold set to 0.25
+
+Parallel I/O time: 0s
+
+Alive after each generation:
+[523856, 840648, 923136, 1034024, 1111440, 1177488, 1232928, 1276440, 1317536, 1348920, 1380328, 1405184, 1428168, 1447552, 1463160, 1477928, 1491864, 1503896, 1515552, 1523440, ]
 
 Total execution time: 0s
