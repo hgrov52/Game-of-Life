@@ -58,7 +58,7 @@ if __name__ == "__main__":
     #plt.hist(hist_data.shape)
     #sns.heatmap(kde(hist_data))
 
-    plt.show()
+    #plt.show()
 
 
 
