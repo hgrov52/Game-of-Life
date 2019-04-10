@@ -48,16 +48,21 @@ if __name__ == "__main__":
     print(data)
 
     hist_data = submatsum(data, data.shape[0]//(2**5), data.shape[1]//(2**5))
+    hist_data /= np.max(hist_data)
+
 
     #hist_data, edges = np.histogram(data)
     print(hist_data.shape)
 
-    im = plt.imshow(hist_data, cmap=plt.cm.RdBu, norm= True, interpolation='bilinear')
+    im = plt.imshow(hist_data, cmap=plt.cm.RdBu, interpolation='bilinear')
     plt.colorbar(im);
+
+    plt.title("Heatmap of Game-of-Life Universe")
 
     #plt.hist(hist_data.shape)
     #sns.heatmap(kde(hist_data))
 
+    plt.savefig("heatmap.jpg")
     #plt.show()
 
 
