@@ -42,8 +42,8 @@ if __name__ == "__main__":
     
     '''
     # load the data
-    fname = "sample_data.txt"
-    data = np.loadtxt(fname, delimiter= ",")
+    fname = "test_output.txt"
+    data = np.loadtxt(fname, delimiter= "")
     #data = np.random.randint(0, high= 2, size= (2**15, 2**15), dtype= int)
     print(data)
 
