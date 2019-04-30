@@ -103,7 +103,7 @@ int num_ranks;
 int num_threads = 1;
 int DEBUG = 0;
 int PRINT = 0;
-float threshold = 0.0;
+float threshold = 0.25;
 #define board_size 32768
 int num_ticks = 256;
 long long * tick_sums;
